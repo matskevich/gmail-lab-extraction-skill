@@ -20,6 +20,8 @@ check_bin node
 check_bin python3
 check_bin rsync
 check_bin file
+check_bin pdftotext
+check_bin pdftoppm
 check_bin tesseract
 
 echo

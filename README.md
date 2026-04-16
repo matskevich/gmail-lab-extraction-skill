@@ -58,6 +58,17 @@ check environment:
 ./scripts/doctor.sh
 ```
 
+expected OCR/PDF helpers:
+- `tesseract` for image-heavy email assets and OCR fallback
+- `pdftotext` for text-first PDF extraction
+- `pdftoppm` for scanned/passworded PDF page rendering before OCR
+
+on macOS the practical install is usually:
+
+```bash
+brew install tesseract poppler
+```
+
 run a logged, reproducible extraction batch:
 
 ```bash
@@ -129,6 +140,10 @@ password-protected pdf lane:
     - `PDF_BIRTH_DATE=1984-10-26`
     - `PDF_PASSWORD_CANDIDATES=26101984,19841026`
 - manifests keep `password_source`, but redact the concrete password value
+
+image-heavy targets:
+- if the medical document is an inline image or an attached `.jpg/.png`, `tesseract` is the main dependency
+- if the medical document is a scanned PDF, you need both `poppler` (`pdftoppm` / `pdftotext`) and `tesseract`
 
 date policy:
 - every exported asset gets a date in `final/`

@@ -97,6 +97,14 @@ python3 "$HOME/.codex/skills/gmail-browser-attachments/scripts/ocr_image_assets.
   ./ocr
 ```
 
+dependency note:
+- `tesseract` is required for image-heavy targets
+- `pdftotext` and `pdftoppm` are required for passworded or scanned PDF text extraction
+- on macOS the practical install is:
+```bash
+brew install tesseract poppler
+```
+
 8. if a PDF is password-protected, pass hints to the repo runner or the text extractor:
 ```bash
 PDF_BIRTH_DATE=1984-10-26 \
