@@ -6,7 +6,7 @@
     { "name": "raw_file", "type": "absolute_path", "required": true },
     { "name": "final_file", "type": "absolute_path", "required": true },
     { "name": "analysis_date", "type": "date", "format": "YYYY-MM-DD", "required": true },
-    { "name": "analysis_date_source", "type": "string", "required": true, "enum": ["provider_page", "gmail_received_or_thread", "ocr_contextual_date", "filename", "run_fallback"] },
+    { "name": "analysis_date_source", "type": "string", "required": true, "enum": ["provider_page", "gmail_received_or_thread", "artifact_contextual_date", "filename", "run_fallback"] },
     { "name": "analysis_date_status", "type": "string", "required": true, "enum": ["direct", "inferred", "fallback"] },
     { "name": "owner_name", "type": "string", "required": true },
     { "name": "owner_source", "type": "string", "required": true, "enum": ["provider_client", "thread_salutation", "thread_title", "filename_or_text_name", "filename_name", "none"] },

@@ -28,6 +28,7 @@ WAIT_SECONDS="${WAIT_SECONDS:-30}"
 STOP_CHROME_ON_EXIT="${STOP_CHROME_ON_EXIT:-1}"
 
 RAW_DIR="$RUN_DIR/raw"
+PDF_TEXT_DIR="$RUN_DIR/pdf_text"
 LOG_DIR="$RUN_DIR/logs"
 MANIFEST_TSV="$RUN_DIR/run_manifest.tsv"
 META_TXT="$RUN_DIR/run_meta.txt"
@@ -35,7 +36,7 @@ ASSET_MANIFEST="$RUN_DIR/asset_manifest.tsv"
 CHROME_LOG="$LOG_DIR/chrome_clone.log"
 SMOKE_LOG="$LOG_DIR/smoke_check.log"
 
-mkdir -p "$RAW_DIR" "$LOG_DIR"
+mkdir -p "$RAW_DIR" "$PDF_TEXT_DIR" "$LOG_DIR"
 
 CHROME_PID=""
 STARTED_CLONE=0
@@ -55,7 +56,7 @@ trap cleanup EXIT INT TERM
   echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$META_TXT"
 
-echo -e "line_no\tprovider\tlocator\trow_needle\tpatient_hint\tportal_url\tstatus\traw_dir\tthread_json\tprovider_json\tstderr_log" > "$MANIFEST_TSV"
+echo -e "line_no\tprovider\tlocator\trow_needle\tpatient_hint\tportal_url\tstatus\traw_dir\tpdf_text_manifest\tthread_json\tprovider_json\tstderr_log" > "$MANIFEST_TSV"
 
 port_is_up() {
   python3 - <<'PY' "$PORT"
@@ -171,10 +172,12 @@ while IFS=$'\t' read -r provider locator row_needle patient_hint; do
   line_no=$((line_no + 1))
   slug="$(slugify "${line_no}-${provider}-${locator}")"
   target_raw="$RAW_DIR/$slug"
+  target_pdf_text="$PDF_TEXT_DIR/$slug"
   thread_json="$LOG_DIR/$slug.thread.json"
   provider_json="$LOG_DIR/$slug.provider.json"
   stderr_log="$LOG_DIR/$slug.stderr.log"
-  mkdir -p "$target_raw"
+  pdf_text_manifest="$target_pdf_text/pdf_text_manifest.tsv"
+  mkdir -p "$target_raw" "$target_pdf_text"
 
   row_status="ok"
   portal_url=""
@@ -252,8 +255,13 @@ PY
     esac
   fi
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$line_no" "$provider" "$locator" "${row_needle:-}" "${patient_hint:-}" "$portal_url" "$row_status" "$target_raw" "$thread_json" "$provider_json" "$stderr_log" \
+  python3 "$REPO_ROOT/scripts/extract_pdf_text.py" "$target_raw" "$target_pdf_text" --thread-json "$thread_json" --provider-json "$provider_json" >"$LOG_DIR/$slug.pdf_text.stdout.log" 2>"$LOG_DIR/$slug.pdf_text.stderr.log" || true
+  if [[ ! -f "$pdf_text_manifest" ]]; then
+    pdf_text_manifest="-"
+  fi
+
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$line_no" "$provider" "$locator" "${row_needle:-}" "${patient_hint:-}" "$portal_url" "$row_status" "$target_raw" "$pdf_text_manifest" "$thread_json" "$provider_json" "$stderr_log" \
     >> "$MANIFEST_TSV"
 done < "$TARGETS_FILE"
 

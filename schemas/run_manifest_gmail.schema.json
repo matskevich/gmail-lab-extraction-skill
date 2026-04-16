@@ -11,6 +11,7 @@
     { "name": "extracted_count", "type": "integer", "required": true },
     { "name": "raw_dir", "type": "absolute_path", "required": true },
     { "name": "ocr_manifest", "type": "absolute_path_or_dash", "required": true },
+    { "name": "pdf_text_manifest", "type": "absolute_path_or_dash", "required": true },
     { "name": "json_log", "type": "absolute_path", "required": true },
     { "name": "stderr_log", "type": "absolute_path", "required": true },
     { "name": "query", "type": "string", "required": true },

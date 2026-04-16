@@ -12,6 +12,7 @@
     { "name": "portal_url", "type": "url_or_empty", "required": true },
     { "name": "status", "type": "string", "required": true, "enum": ["ok", "thread_fail", "portal_link_missing", "portal_ws_missing", "provider_fail", "unsupported_provider"] },
     { "name": "raw_dir", "type": "absolute_path", "required": true },
+    { "name": "pdf_text_manifest", "type": "absolute_path_or_dash", "required": true },
     { "name": "thread_json", "type": "absolute_path", "required": true },
     { "name": "provider_json", "type": "absolute_path", "required": true },
     { "name": "stderr_log", "type": "absolute_path", "required": true }

@@ -30,6 +30,7 @@ STOP_CHROME_ON_EXIT="${STOP_CHROME_ON_EXIT:-1}"
 
 RAW_DIR="$RUN_DIR/raw"
 OCR_DIR="$RUN_DIR/ocr"
+PDF_TEXT_DIR="$RUN_DIR/pdf_text"
 LOG_DIR="$RUN_DIR/logs"
 MANIFEST_TSV="$RUN_DIR/run_manifest.tsv"
 META_TXT="$RUN_DIR/run_meta.txt"
@@ -37,7 +38,7 @@ ASSET_MANIFEST="$RUN_DIR/asset_manifest.tsv"
 CHROME_LOG="$LOG_DIR/chrome_clone.log"
 SMOKE_LOG="$LOG_DIR/smoke_check.log"
 
-mkdir -p "$RAW_DIR" "$OCR_DIR" "$LOG_DIR"
+mkdir -p "$RAW_DIR" "$OCR_DIR" "$PDF_TEXT_DIR" "$LOG_DIR"
 
 CHROME_PID=""
 STARTED_CLONE=0
@@ -57,7 +58,7 @@ trap cleanup EXIT INT TERM
   echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$META_TXT"
 
-echo -e "line_no\tslug\tmode\tstatus\textracted_count\traw_dir\tocr_manifest\tjson_log\tstderr_log\tquery\tneedle" > "$MANIFEST_TSV"
+echo -e "line_no\tslug\tmode\tstatus\textracted_count\traw_dir\tocr_manifest\tpdf_text_manifest\tjson_log\tstderr_log\tquery\tneedle" > "$MANIFEST_TSV"
 
 port_is_up() {
   python3 - <<'PY' "$PORT"
@@ -126,10 +127,12 @@ while IFS=$'\t' read -r query needle mode; do
   slug="$(slugify "${line_no}-${needle}")"
   target_raw="$RAW_DIR/$slug"
   target_ocr="$OCR_DIR/$slug"
+  target_pdf_text="$PDF_TEXT_DIR/$slug"
   json_log="$LOG_DIR/$slug.extract.json"
   stderr_log="$LOG_DIR/$slug.extract.stderr.log"
   ocr_manifest="$target_ocr/ocr_manifest.tsv"
-  mkdir -p "$target_raw" "$target_ocr"
+  pdf_text_manifest="$target_pdf_text/pdf_text_manifest.tsv"
+  mkdir -p "$target_raw" "$target_ocr" "$target_pdf_text"
 
   if [[ "$mode" == "inline" ]]; then
     collector=(node "$SKILL_DIR/scripts/gmail_collect_inline_assets_from_query.mjs" "$WS_URL" "$query" "$needle" "$target_raw")
@@ -162,12 +165,17 @@ PY
     python3 "$SKILL_DIR/scripts/ocr_image_assets.py" "$target_raw" "$target_ocr" >"$LOG_DIR/$slug.ocr.stdout.log" 2>"$LOG_DIR/$slug.ocr.stderr.log" || row_status="ocr_fail"
   fi
 
+  python3 "$REPO_ROOT/scripts/extract_pdf_text.py" "$target_raw" "$target_pdf_text" --thread-json "$json_log" >"$LOG_DIR/$slug.pdf_text.stdout.log" 2>"$LOG_DIR/$slug.pdf_text.stderr.log" || true
+
   if [[ ! -f "$ocr_manifest" ]]; then
     ocr_manifest="-"
   fi
+  if [[ ! -f "$pdf_text_manifest" ]]; then
+    pdf_text_manifest="-"
+  fi
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$line_no" "$slug" "$mode" "$row_status" "$extracted_count" "$target_raw" "$ocr_manifest" "$json_log" "$stderr_log" "$query" "$needle" \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$line_no" "$slug" "$mode" "$row_status" "$extracted_count" "$target_raw" "$ocr_manifest" "$pdf_text_manifest" "$json_log" "$stderr_log" "$query" "$needle" \
     >> "$MANIFEST_TSV"
 done < "$TARGETS_FILE"
 

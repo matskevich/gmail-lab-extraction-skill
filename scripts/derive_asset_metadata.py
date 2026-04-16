@@ -73,7 +73,7 @@ def parse_numeric_dates(text: str) -> list[str]:
         elif b > 12:
             month, day = a, b
         else:
-            month, day = a, b
+            day, month = a, b
         if 1 <= month <= 12 and 1 <= day <= 31:
             out.append(f"{year:04d}-{month:02d}-{day:02d}")
     return out
@@ -173,7 +173,7 @@ def choose_owner(*texts: str) -> tuple[str, str]:
 
 
 def analysis_date_status(source: str) -> str:
-    if source in {"provider_page", "ocr_contextual_date"}:
+    if source in {"provider_page", "artifact_contextual_date"}:
         return "direct"
     if source in {"gmail_received_or_thread", "filename"}:
         return "inferred"
@@ -203,6 +203,7 @@ def choose_analysis_date(
     provider_json: dict,
     thread_json: dict,
     ocr_texts: list[str],
+    pdf_texts: list[str],
     file_name: str,
     received_fallback: str,
 ) -> tuple[str, str]:
@@ -227,15 +228,27 @@ def choose_analysis_date(
     if normalized_thread_dates:
         return normalized_thread_dates[0], "gmail_received_or_thread"
 
-    ocr_dates = []
-    for text in ocr_texts:
+    artifact_context_dates = []
+    artifact_texts = [*ocr_texts, *pdf_texts]
+    artifact_date_tokens = (
+        "дата взят",
+        "дата исслед",
+        "date of collection",
+        "specimen date",
+        "analysis date",
+        "дата анализа",
+        "report date",
+        "reg no / date",
+        "tanggal",
+    )
+    for text in artifact_texts:
         for line in text.splitlines():
             low = line.lower()
-            if any(token in low for token in ("дата взят", "дата исслед", "date of collection", "specimen date", "analysis date", "дата анализа")):
-                ocr_dates.extend(extract_dates(line))
-    ocr_dates = unique_keep_order(ocr_dates)
-    if ocr_dates:
-        return ocr_dates[0], "ocr_contextual_date"
+            if any(token in low for token in artifact_date_tokens):
+                artifact_context_dates.extend(extract_dates(line))
+    artifact_context_dates = unique_keep_order(artifact_context_dates)
+    if artifact_context_dates:
+        return artifact_context_dates[0], "artifact_contextual_date"
 
     filename_dates = extract_dates(file_text)
     if filename_dates:
@@ -251,6 +264,21 @@ def load_ocr_texts(ocr_manifest_path: Path) -> list[str]:
     texts = []
     for row in rows:
         txt = row.get("ocr_txt", "")
+        if not txt:
+            continue
+        p = Path(txt)
+        if p.exists():
+            texts.append(p.read_text(encoding="utf-8", errors="ignore"))
+    return texts
+
+
+def load_pdf_texts(pdf_text_manifest_path: Path) -> list[str]:
+    if not pdf_text_manifest_path.exists() or pdf_text_manifest_path.name == "-":
+        return []
+    rows = read_tsv(pdf_text_manifest_path)
+    texts = []
+    for row in rows:
+        txt = row.get("text_txt", "")
         if not txt:
             continue
         p = Path(txt)
@@ -302,6 +330,7 @@ def main() -> int:
             provider_json = {}
             saved_items = extract_json.get("saved", []) if isinstance(extract_json, dict) else []
             ocr_texts = load_ocr_texts(Path(row["ocr_manifest"])) if row.get("ocr_manifest", "-") != "-" else []
+            pdf_texts = load_pdf_texts(Path(row["pdf_text_manifest"])) if row.get("pdf_text_manifest", "-") != "-" else []
         else:
             query = ""
             provider_json = json_load(Path(row.get("provider_json", "")))
@@ -311,6 +340,7 @@ def main() -> int:
             for file_path in sorted(p for p in raw_dir.glob("*") if p.is_file()):
                 saved_items.append({"saved_to": str(file_path), "filename": file_path.name})
             ocr_texts = []
+            pdf_texts = load_pdf_texts(Path(row["pdf_text_manifest"])) if row.get("pdf_text_manifest", "-") != "-" else []
 
         provider, provider_source = provider_from_context(thread_json, provider_json, query)
         owner_name, owner_source = choose_owner(
@@ -321,13 +351,14 @@ def main() -> int:
             "\n".join(str(item.get("saved_to", "")) for item in saved_items),
             "\n".join(str(v) for v in (provider_json.get("meta", {}) or {}).values()),
             "\n".join(ocr_texts),
+            "\n".join(pdf_texts),
         )
 
         for item in saved_items:
             raw_path = Path(item["saved_to"])
             raw_name = item.get("filename") or raw_path.name
             analysis_date, date_source = choose_analysis_date(
-                provider_json, thread_json, ocr_texts, raw_name, run_started
+                provider_json, thread_json, ocr_texts, pdf_texts, raw_name, run_started
             )
             date_status = analysis_date_status(date_source)
             owner_status_value = owner_status(owner_source)

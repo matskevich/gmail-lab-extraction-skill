@@ -10,6 +10,7 @@ the repo has 4 layers:
 
 2. derivation
 - OCR runs on image assets
+- PDF text extraction runs on normal and password-hinted PDFs
 - metadata derivation assigns `analysis_date`, `owner`, `provider`, and confidence
 
 3. materialization
@@ -64,6 +65,19 @@ responsibility:
 must not do:
 - choose the final date blindly from any found number
 
+### PDF text extraction
+- `scripts/extract_pdf_text.py`
+
+responsibility:
+- extract text from PDFs after raw bytes land locally
+- try plain text extraction first
+- if needed, derive password candidates from thread/provider context or env hints
+- fall back to rendering pages + OCR when the PDF is scanned
+
+must not do:
+- store concrete passwords in manifests
+- assume every encrypted PDF is solvable without hints
+
 ### metadata derivation
 - `scripts/derive_asset_metadata.py`
 
@@ -92,6 +106,7 @@ targets.tsv / portal_targets.tsv
   -> runner
   -> raw/ + logs/ + run_manifest.tsv
   -> OCR for images
+  -> PDF text extraction for PDFs
   -> derive_asset_metadata.py
   -> final/ + asset_manifest.tsv
 ```

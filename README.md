@@ -14,12 +14,13 @@ what it does:
 - extracts gmail inline image assets rendered through `view=fimg` / `attid`
 - follows tokenized portal links from gmail for supported providers
 - runs ocr over extracted image assets
+- extracts text from normal and password-hinted PDFs, with OCR fallback for scanned PDFs
 - derives `analysis_date` + `owner` metadata and materializes canonical filenames in `final/`
 - writes run logs, manifests, and per-target outputs
 
 what it does not do:
 - external site login automation
-- guaranteed parsing of encrypted or vector-locked pdfs
+- guaranteed parsing of every encrypted or vector-locked pdf
 - generic provider support for every lab portal
 
 truthful claim:
@@ -67,6 +68,7 @@ that creates:
 - `runs/run-YYYYmmdd-HHMMSS/raw/`
 - `runs/run-YYYYmmdd-HHMMSS/final/`
 - `runs/run-YYYYmmdd-HHMMSS/ocr/`
+- `runs/run-YYYYmmdd-HHMMSS/pdf_text/`
 - `runs/run-YYYYmmdd-HHMMSS/logs/`
 - `runs/run-YYYYmmdd-HHMMSS/run_manifest.tsv`
 - `runs/run-YYYYmmdd-HHMMSS/asset_manifest.tsv`
@@ -114,12 +116,26 @@ metadata layer:
   - `owner_status` = `likely_owner|weak_owner|unknown_owner`
   - provider + confidence
 
+password-protected pdf lane:
+- the runners also create `pdf_text/<target>/pdf_text_manifest.tsv`
+- extraction order is:
+  - plain `pdftotext`
+  - password-aware `pdftotext` using inferred candidates
+  - password-aware `pdftoppm` + `tesseract` OCR fallback
+- password candidates can come from:
+  - provider metadata such as `birthDate`
+  - gmail thread text such as `password is your birth date DDMMYYYY`
+  - explicit env hints:
+    - `PDF_BIRTH_DATE=1984-10-26`
+    - `PDF_PASSWORD_CANDIDATES=26101984,19841026`
+- manifests keep `password_source`, but redact the concrete password value
+
 date policy:
 - every exported asset gets a date in `final/`
 - source priority is:
   - provider result page
   - gmail thread / received date
-  - contextual OCR date on the artifact
+  - contextual artifact date from OCR or extracted PDF text
   - filename
   - run fallback
 - if the date is indirect, the filename still carries it, and `asset_manifest.tsv` keeps the source + status so downstream ingest can tell `direct` from `inferred`

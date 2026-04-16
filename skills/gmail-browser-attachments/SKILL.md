@@ -32,11 +32,12 @@ covered asset classes:
 - `native attachments`: PDFs, JPGs, PNGs, and other Gmail attachments with `download_url`
 - `gmail inline image assets`: images rendered through `view=fimg` / `attid`
 - `ocr lane`: OCR over extracted image results
+- `passworded pdf text lane`: `pdftotext` first, then password-aware OCR fallback when hints are available
 
 not covered:
 - `portal-link / personal cabinet` cases with no Gmail attachment surface
 - provider flows that require a separate username/password login
-- encrypted or vector-locked PDF parsing guarantees
+- guaranteed parsing of every encrypted or vector-locked PDF
 
 ## quick start
 
@@ -96,6 +97,18 @@ python3 "$HOME/.codex/skills/gmail-browser-attachments/scripts/ocr_image_assets.
   ./ocr
 ```
 
+8. if a PDF is password-protected, pass hints to the repo runner or the text extractor:
+```bash
+PDF_BIRTH_DATE=1984-10-26 \
+PDF_PASSWORD_CANDIDATES=26101984 \
+python3 ./scripts/extract_pdf_text.py ./downloads ./pdf_text
+```
+
+password policy:
+- prefer inferred candidates from thread/provider context first
+- allow explicit operator hints through env vars
+- never persist the concrete password in manifests; only keep `password_source`
+
 proven live cases:
 - a recent medical-result email with a native PDF attachment -> PDF extracted
 - a historical email with only inline images -> `7 jpg` extracted + `7 txt` via OCR
@@ -139,6 +152,11 @@ run:
 
 - OCR output is weak
   the image may be low-resolution, rotated, or embedded in a PDF that this lane does not parse
+
+- passworded PDF still fails
+  first hypothesis: the thread/provider context never exposed the password rule
+  second hypothesis: the password pattern is provider-specific and needs an explicit hint
+  third hypothesis: the PDF is image-only and needs OCR fallback
 
 - repeated duplicates or ugly filenames
   the scripts sanitize names and suffix duplicates, but dedupe should still happen before promotion into a truth layer

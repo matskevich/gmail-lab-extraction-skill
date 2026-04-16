@@ -16,6 +16,7 @@ current truth:
 - gmail native attachments: working
 - gmail inline image assets: working
 - image OCR lane: working
+- password-hinted PDF text extraction: working
 - metadata derivation for `analysis_date` and `owner`: working on gmail runs
 - portal-backed invitro export for anonymous result links: working
 
@@ -32,6 +33,7 @@ repo entrypoints:
 artifact contract:
 - `raw/` = provenance-safe extracted files, never renamed in place
 - `ocr/` = OCR derivatives for image assets
+- `pdf_text/` = extracted or OCR'd text for PDF assets, including password-hinted PDFs
 - `final/` = canonical filenames with `date__provider__owner__original`
 - `run_manifest.tsv` = per-target execution log
 - `asset_manifest.tsv` = per-file metadata truth layer for downstream ingest
@@ -39,11 +41,11 @@ artifact contract:
 date policy:
 - every artifact must end with an `analysis_date`
 - source priority:
-  1. provider page
-  2. gmail thread / received date
-  3. contextual OCR date
-  4. filename
-  5. run fallback
+1. provider page
+2. gmail thread / received date
+ 3. contextual artifact date from OCR or PDF text
+4. filename
+5. run fallback
 - keep the source in `asset_manifest.tsv`; do not hide an inferred date behind a clean filename
 
 owner policy:
@@ -56,6 +58,7 @@ owner policy:
 
 safe change rules:
 - prefer adding new provider adapters over complicating the gmail collectors
+- keep password inference in the PDF text lane, not in the collectors
 - prefer new manifest fields over implicit parsing assumptions
 - keep modules small and single-purpose
 - if you add a new status or column, update:

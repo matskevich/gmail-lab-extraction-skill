@@ -1,0 +1,15 @@
+{
+  "name": "pdf_text_manifest.tsv",
+  "kind": "tabular_schema",
+  "description": "Per-PDF text extraction log emitted after raw PDF download.",
+  "columns": [
+    { "name": "source_file", "type": "absolute_path", "required": true },
+    { "name": "text_txt", "type": "absolute_path_or_empty", "required": true },
+    { "name": "method", "type": "string", "required": true, "enum": ["", "pdftotext", "pdftotext_password", "pdf_ocr", "pdf_ocr_password"] },
+    { "name": "password_source", "type": "string", "required": true, "enum": ["", "none", "env_password_candidates", "env_birth_date", "provider_birth_date", "thread_explicit_password", "thread_birth_date_hint"] },
+    { "name": "password_used", "type": "string", "required": true },
+    { "name": "candidate_count", "type": "integer", "required": true },
+    { "name": "status", "type": "string", "required": true, "enum": ["ok_text", "ok_ocr", "fail"] },
+    { "name": "notes", "type": "string", "required": true }
+  ]
+}

@@ -7,9 +7,10 @@
 3. extract inline image-based results
 4. support portal-linked results where possible
 5. OCR image results
-6. guarantee an `analysis_date` for every artifact
-7. capture whose result it is
-8. package the work as a reusable skill/repo for other agents
+6. handle password-protected PDFs when the password can be inferred or supplied
+7. guarantee an `analysis_date` for every artifact
+8. capture whose result it is
+9. package the work as a reusable skill/repo for other agents
 
 ## current status
 
@@ -17,6 +18,7 @@
 - `gmail search -> thread -> native attachments`
 - `gmail search -> thread -> inline image assets`
 - OCR for image assets
+- password-hinted PDF text extraction with OCR fallback
 - reproducible runs with `run_manifest.tsv`
 - metadata derivation for `analysis_date`
 - metadata derivation for `owner`
@@ -27,6 +29,7 @@
 - `analysis_date` is sometimes inferred from gmail thread date, not direct from artifact
 - `owner` can still be `weak_owner` or `unknown_owner` on forwarded / context-only mails
 - provider detection is heuristic outside explicit provider hints
+- passworded PDFs still need either a discoverable rule in context or an explicit operator hint
 
 ### red
 - generic login-required provider automation does not exist yet
