@@ -1,0 +1,19 @@
+{
+  "name": "run_manifest.tsv",
+  "lane": "portal",
+  "kind": "tabular_schema",
+  "description": "Per-target execution log for portal-backed extraction runs.",
+  "columns": [
+    { "name": "line_no", "type": "integer", "required": true },
+    { "name": "provider", "type": "string", "required": true },
+    { "name": "locator", "type": "string", "required": true },
+    { "name": "row_needle", "type": "string", "required": false },
+    { "name": "patient_hint", "type": "string", "required": false },
+    { "name": "portal_url", "type": "url_or_empty", "required": true },
+    { "name": "status", "type": "string", "required": true, "enum": ["ok", "thread_fail", "portal_link_missing", "portal_ws_missing", "provider_fail", "unsupported_provider"] },
+    { "name": "raw_dir", "type": "absolute_path", "required": true },
+    { "name": "thread_json", "type": "absolute_path", "required": true },
+    { "name": "provider_json", "type": "absolute_path", "required": true },
+    { "name": "stderr_log", "type": "absolute_path", "required": true }
+  ]
+}

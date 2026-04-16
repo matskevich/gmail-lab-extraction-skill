@@ -1,0 +1,19 @@
+{
+  "name": "run_manifest.tsv",
+  "lane": "gmail",
+  "kind": "tabular_schema",
+  "description": "Per-target execution log for gmail extraction runs.",
+  "columns": [
+    { "name": "line_no", "type": "integer", "required": true },
+    { "name": "slug", "type": "string", "required": true },
+    { "name": "mode", "type": "string", "required": true, "enum": ["auto", "inline"] },
+    { "name": "status", "type": "string", "required": true, "enum": ["ok", "extract_fail", "ocr_fail"] },
+    { "name": "extracted_count", "type": "integer", "required": true },
+    { "name": "raw_dir", "type": "absolute_path", "required": true },
+    { "name": "ocr_manifest", "type": "absolute_path_or_dash", "required": true },
+    { "name": "json_log", "type": "absolute_path", "required": true },
+    { "name": "stderr_log", "type": "absolute_path", "required": true },
+    { "name": "query", "type": "string", "required": true },
+    { "name": "needle", "type": "string", "required": true }
+  ]
+}

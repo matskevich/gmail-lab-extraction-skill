@@ -1,0 +1,3 @@
+from:lab@example.com order-123	order-123	auto
+from:provider@example.com claim-456	claim-456	auto
+from:sender@example.com after:2024-01-01 before:2024-01-31	Result	inline

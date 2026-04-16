@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gmail Browser Attachments"
+  short_description: "Extract Gmail attachments, inline images, and OCR via logged-in Chrome"
+  default_prompt: "Use $gmail-browser-attachments to pull Gmail attachments or inline lab images into the local workspace from a logged-in Chrome session, then OCR image-based results when needed."
