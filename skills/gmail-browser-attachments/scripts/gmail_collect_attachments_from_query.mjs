@@ -39,6 +39,41 @@ function gmailThreadContextExpression() {
   `;
 }
 
+function gmailAssetDiagnosticsExpression() {
+  return `
+    (() => {
+      const bodyText = document.body.innerText || '';
+      const unique = (items) => Array.from(new Set(items.filter(Boolean)));
+      const sanitizeName = (value) => (value || '')
+        .trim()
+        .replace(/^["'([<{\\s]+/, '')
+        .replace(/["')>},;:\\s]+$/, '');
+      const attachmentLines = bodyText
+        .split('\\n')
+        .map(line => sanitizeName(line))
+        .filter(line => /\\.(?:pdf|jpe?g|png|gif|webp|tiff?)$/i.test(line));
+      const attachmentMatches = Array.from(
+        bodyText.matchAll(/[^\n]{1,220}?\\.(?:pdf|jpe?g|png|gif|webp|tiff?)/ig)
+      ).map(match => sanitizeName(match[0]));
+      const attachmentCandidateNames = unique([...attachmentLines, ...attachmentMatches]).slice(0, 30);
+      const inlineCandidateCount = Array.from(document.querySelectorAll('img[src]')).filter(img => {
+        const src = img.currentSrc || img.src || '';
+        const w = img.naturalWidth || img.width || 0;
+        const h = img.naturalHeight || img.height || 0;
+        const isGmailImageAttachment = src.includes('view=fimg') || /[?&]attid=/.test(src);
+        return src && !src.startsWith('data:') && (isGmailImageAttachment || (Math.max(w, h) >= 80 && (w * h) >= 12000));
+      }).length;
+      return {
+        attachmentCandidateNames,
+        attachmentCandidateCount: attachmentCandidateNames.length,
+        downloadUrlCount: document.querySelectorAll('[download_url]').length,
+        inlineCandidateCount,
+        scanningForViruses: /scanning for viruses|проверка на вирусы|сканирование на вирусы/i.test(bodyText),
+      };
+    })()
+  `;
+}
+
 async function waitFor(session, checkExpression, timeoutMs = 15000, intervalMs = 500) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -95,16 +130,14 @@ try {
     `);
 
     await new Promise((r) => setTimeout(r, 1500));
+    const diagnosticsExpression = gmailAssetDiagnosticsExpression();
     try {
       await waitFor(
         session,
-        `document.querySelectorAll('[download_url]').length > 0 || Array.from(document.querySelectorAll('img[src]')).some(img => {
-          const src = img.currentSrc || img.src || '';
-          const w = img.naturalWidth || img.width || 0;
-          const h = img.naturalHeight || img.height || 0;
-          const isGmailImageAttachment = src.includes('view=fimg') || /[?&]attid=/.test(src);
-          return src && !src.startsWith('data:') && (isGmailImageAttachment || (Math.max(w, h) >= 80 && (w * h) >= 12000));
-        })`,
+        `(() => {
+          const d = ${diagnosticsExpression};
+          return d.downloadUrlCount > 0 || d.inlineCandidateCount > 0 || d.attachmentCandidateCount > 0;
+        })()`,
         10000,
         750
       );
@@ -112,7 +145,31 @@ try {
       // Some threads genuinely have no visible assets; fall through to diagnostic error below.
     }
 
+    let diagnostics = await session.evaluate(diagnosticsExpression);
+    if (diagnostics.attachmentCandidateCount > 0 && diagnostics.downloadUrlCount === 0) {
+      try {
+        await waitFor(
+          session,
+          `(() => {
+            const d = ${diagnosticsExpression};
+            return d.downloadUrlCount > 0 || !d.scanningForViruses;
+          })()`,
+          diagnostics.scanningForViruses ? 30000 : 12000,
+          1000
+        );
+      } catch {
+        // Fall through with diagnostics captured below; caller can inspect counts.
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+      diagnostics = await session.evaluate(diagnosticsExpression);
+    }
+
     const thread = await session.evaluate(gmailThreadContextExpression());
+    thread.attachmentNames = diagnostics.attachmentCandidateNames;
+    thread.attachmentCandidateCount = diagnostics.attachmentCandidateCount;
+    thread.downloadUrlCount = diagnostics.downloadUrlCount;
+    thread.inlineCandidateCount = diagnostics.inlineCandidateCount;
+    thread.scanningForViruses = diagnostics.scanningForViruses;
 
     const assets = await session.evaluate(`
       (() => {
@@ -155,7 +212,11 @@ try {
         return assets;
       })()
     `);
-    if (!assets?.length) throw new Error(`no assets found for row: ${rowNeedle}`);
+    if (!assets?.length) {
+      throw new Error(
+        `no assets found for row: ${rowNeedle}; attachment_candidate_count=${diagnostics.attachmentCandidateCount}; download_url_count=${diagnostics.downloadUrlCount}; inline_candidate_count=${diagnostics.inlineCandidateCount}; scanning_for_viruses=${diagnostics.scanningForViruses}`
+      );
+    }
 
     const saved = [];
     for (const att of assets) {
@@ -211,7 +272,12 @@ try {
       saved.push({ kind: payload.kind, filename: payload.filename, size: payload.size, saved_to: written.outPath });
     }
 
-    return { query, rowNeedle, thread, saved };
+    const savedCounts = saved.reduce((acc, item) => {
+      acc[item.kind] = (acc[item.kind] || 0) + 1;
+      return acc;
+    }, {});
+
+    return { query, rowNeedle, thread, diagnostics, savedCounts, saved };
   });
   console.log(JSON.stringify(result, null, 2));
 } catch (err) {
