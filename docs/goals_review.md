@@ -20,6 +20,7 @@
 - OCR for image assets
 - password-hinted PDF text extraction with OCR fallback
 - reproducible runs with `run_manifest.tsv`
+- explicit separation between acquisition status and enrichment status
 - metadata derivation for `analysis_date`
 - metadata derivation for `owner`
 - canonical filenames in `final/`
@@ -30,6 +31,7 @@
 - `owner` can still be `weak_owner` or `unknown_owner` on forwarded / context-only mails
 - provider detection is heuristic outside explicit provider hints
 - passworded PDFs still need either a discoverable rule in context or an explicit operator hint
+- OCR/PDF-text quality still depends on local binaries, but missing tools are now reported as `missing_dependency` instead of fake extraction failure
 
 ### red
 - generic login-required provider automation does not exist yet

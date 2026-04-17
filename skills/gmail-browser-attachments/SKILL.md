@@ -117,6 +117,12 @@ password policy:
 - allow explicit operator hints through env vars
 - never persist the concrete password in manifests; only keep `password_source`
 
+status policy:
+- treat `status` in `run_manifest.tsv` as acquisition only
+- read `ocr_status`, `pdf_text_status`, and `enrichment_status` before calling a run “failed”
+- if OCR/PDF helpers are absent, expect `missing_dependency` rather than `extract_fail`
+- after installing missing helpers, prefer `./scripts/rerun_enrichment.py <run-dir>` over re-downloading the same raw assets
+
 proven live cases:
 - a recent medical-result email with a native PDF attachment -> PDF extracted
 - a historical email with only inline images -> `7 jpg` extracted + `7 txt` via OCR

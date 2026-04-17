@@ -56,7 +56,7 @@ trap cleanup EXIT INT TERM
   echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$META_TXT"
 
-echo -e "line_no\tprovider\tlocator\trow_needle\tpatient_hint\tportal_url\tstatus\traw_dir\tpdf_text_manifest\tthread_json\tprovider_json\tstderr_log" > "$MANIFEST_TSV"
+echo -e "line_no\tprovider\tlocator\trow_needle\tpatient_hint\tportal_url\tstatus\tpdf_text_status\tenrichment_status\traw_dir\tpdf_text_manifest\tthread_json\tprovider_json\tstderr_log" > "$MANIFEST_TSV"
 
 port_is_up() {
   python3 - <<'PY' "$PORT"
@@ -125,6 +125,52 @@ raise SystemExit(1)
 PY
 }
 
+summarize_pdf_text_manifest_status() {
+  python3 - <<'PY' "$1"
+import csv
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    print("not_applicable")
+    raise SystemExit(0)
+rows = list(csv.DictReader(path.open("r", encoding="utf-8"), delimiter="\t"))
+if not rows:
+    print("not_applicable")
+    raise SystemExit(0)
+statuses = {row.get("status", "") for row in rows}
+ok_statuses = {"ok_text", "ok_ocr"}
+if statuses and statuses <= ok_statuses:
+    print("ok")
+elif "missing_dependency" in statuses and statuses <= (ok_statuses | {"missing_dependency"}):
+    print("partial" if statuses & ok_statuses else "missing_dependency")
+elif "fail" in statuses and statuses <= (ok_statuses | {"fail"}):
+    print("partial" if statuses & ok_statuses else "fail")
+elif "missing_dependency" in statuses or "fail" in statuses:
+    print("partial" if statuses & ok_statuses else ("missing_dependency" if "missing_dependency" in statuses and "fail" not in statuses else "fail"))
+else:
+    print("unknown")
+PY
+}
+
+combine_enrichment_status() {
+  python3 - <<'PY' "$1" "$2"
+import sys
+
+row_status, pdf_status = sys.argv[1:3]
+if row_status != "ok":
+    print("blocked_by_extract_fail")
+    raise SystemExit(0)
+if pdf_status == "not_applicable":
+    print("not_applicable")
+elif pdf_status in {"ok", "missing_dependency", "fail", "partial", "unknown"}:
+    print(pdf_status)
+else:
+    print("unknown")
+PY
+}
+
 if [[ ! -f "$TARGETS_FILE" ]]; then
   echo "missing targets file: $TARGETS_FILE" >&2
   exit 1
@@ -180,6 +226,7 @@ while IFS=$'\t' read -r provider locator row_needle patient_hint; do
   mkdir -p "$target_raw" "$target_pdf_text"
 
   row_status="ok"
+  pdf_text_status="not_applicable"
   portal_url=""
   patient_hint="${patient_hint:-}"
 
@@ -255,13 +302,18 @@ PY
     esac
   fi
 
-  python3 "$REPO_ROOT/scripts/extract_pdf_text.py" "$target_raw" "$target_pdf_text" --thread-json "$thread_json" --provider-json "$provider_json" >"$LOG_DIR/$slug.pdf_text.stdout.log" 2>"$LOG_DIR/$slug.pdf_text.stderr.log" || true
+  if [[ "$row_status" == "ok" ]]; then
+    python3 "$REPO_ROOT/scripts/extract_pdf_text.py" "$target_raw" "$target_pdf_text" --thread-json "$thread_json" --provider-json "$provider_json" >"$LOG_DIR/$slug.pdf_text.stdout.log" 2>"$LOG_DIR/$slug.pdf_text.stderr.log" || true
+  fi
   if [[ ! -f "$pdf_text_manifest" ]]; then
     pdf_text_manifest="-"
+  else
+    pdf_text_status="$(summarize_pdf_text_manifest_status "$pdf_text_manifest")"
   fi
+  enrichment_status="$(combine_enrichment_status "$row_status" "$pdf_text_status")"
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$line_no" "$provider" "$locator" "${row_needle:-}" "${patient_hint:-}" "$portal_url" "$row_status" "$target_raw" "$pdf_text_manifest" "$thread_json" "$provider_json" "$stderr_log" \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$line_no" "$provider" "$locator" "${row_needle:-}" "${patient_hint:-}" "$portal_url" "$row_status" "$pdf_text_status" "$enrichment_status" "$target_raw" "$pdf_text_manifest" "$thread_json" "$provider_json" "$stderr_log" \
     >> "$MANIFEST_TSV"
 done < "$TARGETS_FILE"
 

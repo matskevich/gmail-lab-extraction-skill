@@ -75,6 +75,12 @@ run a logged, reproducible extraction batch:
 ./scripts/run_gmail_lab_export.sh ./examples/targets.tsv
 ```
 
+re-run only the derivative lanes after installing missing OCR/PDF tools:
+
+```bash
+./scripts/rerun_enrichment.py ./runs/run-YYYYmmdd-HHMMSS
+```
+
 that creates:
 - `runs/run-YYYYmmdd-HHMMSS/raw/`
 - `runs/run-YYYYmmdd-HHMMSS/final/`
@@ -83,6 +89,13 @@ that creates:
 - `runs/run-YYYYmmdd-HHMMSS/logs/`
 - `runs/run-YYYYmmdd-HHMMSS/run_manifest.tsv`
 - `runs/run-YYYYmmdd-HHMMSS/asset_manifest.tsv`
+
+run manifest semantics:
+- `status` = acquisition only (`ok|extract_fail`)
+- `ocr_status` = image OCR lane status
+- `pdf_text_status` = PDF text/OCR lane status
+- `enrichment_status` = rolled-up derivative status
+- missing system tools now show as `missing_dependency`, not as fake download failure
 
 tsv format:
 
@@ -140,10 +153,12 @@ password-protected pdf lane:
     - `PDF_BIRTH_DATE=1984-10-26`
     - `PDF_PASSWORD_CANDIDATES=26101984,19841026`
 - manifests keep `password_source`, but redact the concrete password value
+- `pdf_text_manifest.tsv` status now distinguishes `missing_dependency` from real extraction failure
 
 image-heavy targets:
 - if the medical document is an inline image or an attached `.jpg/.png`, `tesseract` is the main dependency
 - if the medical document is a scanned PDF, you need both `poppler` (`pdftoppm` / `pdftotext`) and `tesseract`
+- `ocr_manifest.tsv` status now distinguishes `missing_dependency` from OCR runtime failure
 
 date policy:
 - every exported asset gets a date in `final/`

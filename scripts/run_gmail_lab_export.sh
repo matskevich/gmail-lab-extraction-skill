@@ -58,7 +58,7 @@ trap cleanup EXIT INT TERM
   echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$META_TXT"
 
-echo -e "line_no\tslug\tmode\tstatus\textracted_count\traw_dir\tocr_manifest\tpdf_text_manifest\tjson_log\tstderr_log\tquery\tneedle" > "$MANIFEST_TSV"
+echo -e "line_no\tslug\tmode\tstatus\textracted_count\tocr_status\tpdf_text_status\tenrichment_status\traw_dir\tocr_manifest\tpdf_text_manifest\tjson_log\tstderr_log\tquery\tneedle" > "$MANIFEST_TSV"
 
 port_is_up() {
   python3 - <<'PY' "$PORT"
@@ -82,6 +82,89 @@ value = re.sub(r"\s+", "-", value)
 value = re.sub(r"[^a-z0-9а-яё_-]+", "-", value, flags=re.IGNORECASE)
 value = re.sub(r"-{2,}", "-", value).strip("-")
 print(value[:80] or "target")
+PY
+}
+
+summarize_ocr_manifest_status() {
+  python3 - <<'PY' "$1"
+import csv
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    print("not_applicable")
+    raise SystemExit(0)
+rows = list(csv.DictReader(path.open("r", encoding="utf-8"), delimiter="\t"))
+if not rows:
+    print("not_applicable")
+    raise SystemExit(0)
+statuses = {row.get("status", "") for row in rows}
+if statuses == {"ok"}:
+    print("ok")
+elif "missing_dependency" in statuses and statuses <= {"ok", "missing_dependency"}:
+    print("partial" if "ok" in statuses else "missing_dependency")
+elif "fail" in statuses and statuses <= {"ok", "fail"}:
+    print("partial" if "ok" in statuses else "fail")
+elif "missing_dependency" in statuses or "fail" in statuses:
+    print("partial" if "ok" in statuses else ("missing_dependency" if "missing_dependency" in statuses and "fail" not in statuses else "fail"))
+else:
+    print("unknown")
+PY
+}
+
+summarize_pdf_text_manifest_status() {
+  python3 - <<'PY' "$1"
+import csv
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    print("not_applicable")
+    raise SystemExit(0)
+rows = list(csv.DictReader(path.open("r", encoding="utf-8"), delimiter="\t"))
+if not rows:
+    print("not_applicable")
+    raise SystemExit(0)
+statuses = {row.get("status", "") for row in rows}
+ok_statuses = {"ok_text", "ok_ocr"}
+if statuses and statuses <= ok_statuses:
+    print("ok")
+elif "missing_dependency" in statuses and statuses <= (ok_statuses | {"missing_dependency"}):
+    print("partial" if statuses & ok_statuses else "missing_dependency")
+elif "fail" in statuses and statuses <= (ok_statuses | {"fail"}):
+    print("partial" if statuses & ok_statuses else "fail")
+elif "missing_dependency" in statuses or "fail" in statuses:
+    print("partial" if statuses & ok_statuses else ("missing_dependency" if "missing_dependency" in statuses and "fail" not in statuses else "fail"))
+else:
+    print("unknown")
+PY
+}
+
+combine_enrichment_status() {
+  python3 - <<'PY' "$1" "$2" "$3"
+import sys
+
+row_status, ocr_status, pdf_status = sys.argv[1:4]
+if row_status != "ok":
+    print("blocked_by_extract_fail")
+    raise SystemExit(0)
+statuses = [value for value in (ocr_status, pdf_status) if value != "not_applicable"]
+if not statuses:
+    print("not_applicable")
+elif all(value == "ok" for value in statuses):
+    print("ok")
+elif any(value == "partial" for value in statuses):
+    print("partial")
+elif any(value == "ok" for value in statuses) and any(value in {"missing_dependency", "fail", "unknown"} for value in statuses):
+    print("partial")
+elif any(value == "missing_dependency" for value in statuses) and not any(value in {"fail", "unknown"} for value in statuses):
+    print("missing_dependency")
+elif any(value == "fail" for value in statuses):
+    print("fail")
+else:
+    print("unknown")
 PY
 }
 
@@ -141,6 +224,8 @@ while IFS=$'\t' read -r query needle mode; do
   fi
 
   row_status="ok"
+  ocr_status="not_applicable"
+  pdf_text_status="not_applicable"
   if ! "${collector[@]}" >"$json_log" 2>"$stderr_log"; then
     row_status="extract_fail"
   fi
@@ -162,20 +247,24 @@ PY
 )"
 
   if [[ "$row_status" == "ok" ]]; then
-    python3 "$SKILL_DIR/scripts/ocr_image_assets.py" "$target_raw" "$target_ocr" >"$LOG_DIR/$slug.ocr.stdout.log" 2>"$LOG_DIR/$slug.ocr.stderr.log" || row_status="ocr_fail"
+    python3 "$SKILL_DIR/scripts/ocr_image_assets.py" "$target_raw" "$target_ocr" >"$LOG_DIR/$slug.ocr.stdout.log" 2>"$LOG_DIR/$slug.ocr.stderr.log" || true
+    python3 "$REPO_ROOT/scripts/extract_pdf_text.py" "$target_raw" "$target_pdf_text" --thread-json "$json_log" >"$LOG_DIR/$slug.pdf_text.stdout.log" 2>"$LOG_DIR/$slug.pdf_text.stderr.log" || true
   fi
-
-  python3 "$REPO_ROOT/scripts/extract_pdf_text.py" "$target_raw" "$target_pdf_text" --thread-json "$json_log" >"$LOG_DIR/$slug.pdf_text.stdout.log" 2>"$LOG_DIR/$slug.pdf_text.stderr.log" || true
 
   if [[ ! -f "$ocr_manifest" ]]; then
     ocr_manifest="-"
+  else
+    ocr_status="$(summarize_ocr_manifest_status "$ocr_manifest")"
   fi
   if [[ ! -f "$pdf_text_manifest" ]]; then
     pdf_text_manifest="-"
+  else
+    pdf_text_status="$(summarize_pdf_text_manifest_status "$pdf_text_manifest")"
   fi
+  enrichment_status="$(combine_enrichment_status "$row_status" "$ocr_status" "$pdf_text_status")"
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$line_no" "$slug" "$mode" "$row_status" "$extracted_count" "$target_raw" "$ocr_manifest" "$pdf_text_manifest" "$json_log" "$stderr_log" "$query" "$needle" \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$line_no" "$slug" "$mode" "$row_status" "$extracted_count" "$ocr_status" "$pdf_text_status" "$enrichment_status" "$target_raw" "$ocr_manifest" "$pdf_text_manifest" "$json_log" "$stderr_log" "$query" "$needle" \
     >> "$MANIFEST_TSV"
 done < "$TARGETS_FILE"
 

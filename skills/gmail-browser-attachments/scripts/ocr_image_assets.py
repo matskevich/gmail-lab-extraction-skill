@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import mimetypes
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -91,25 +92,46 @@ def main() -> int:
     normalized_dir.mkdir(parents=True, exist_ok=True)
 
     manifest = output_dir / "ocr_manifest.tsv"
-    lines = ["source_file\tnormalized_file\tocr_txt\tmime_type\tsha256\tstatus\n"]
+    lines = ["source_file\tnormalized_file\tocr_txt\tmime_type\tsha256\tstatus\tnotes\n"]
+    tesseract_bin = shutil.which("tesseract")
+    images = list(iter_images(input_path))
 
-    for src in iter_images(input_path):
+    if not tesseract_bin:
+        for src in images:
+            mime_type = detect_mime_type(src)
+            lines.append(
+                f"{src}\t\t\t{mime_type}\t{sha256sum(src)}\tmissing_dependency\ttesseract not found\n"
+            )
+        manifest.write_text("".join(lines), encoding="utf-8")
+        print(manifest)
+        return 0
+
+    for src in images:
         try:
             normalized = normalize_input(src, normalized_dir)
             stem = logical_output_stem(src)
             txt_base = output_dir / stem
             subprocess.run(
-                ["tesseract", str(normalized), str(txt_base), "-l", args.language, "--psm", args.psm],
+                [tesseract_bin, str(normalized), str(txt_base), "-l", args.language, "--psm", args.psm],
                 check=True,
                 capture_output=True,
             )
             txt_path = Path(f"{txt_base}.txt")
             mime_type = detect_mime_type(src)
             lines.append(
-                f"{src}\t{normalized}\t{txt_path}\t{mime_type}\t{sha256sum(src)}\tok\n"
+                f"{src}\t{normalized}\t{txt_path}\t{mime_type}\t{sha256sum(src)}\tok\t\n"
+            )
+        except FileNotFoundError as exc:
+            mime_type = detect_mime_type(src)
+            missing_bin = Path(str(exc.filename or "")).name or "unknown"
+            lines.append(
+                f"{src}\t\t\t{mime_type}\t{sha256sum(src)}\tmissing_dependency\t{missing_bin} not found\n"
             )
         except subprocess.CalledProcessError as exc:
-            lines.append(f"{src}\t\t\t\t\tfail:{exc.returncode}\n")
+            mime_type = detect_mime_type(src)
+            lines.append(
+                f"{src}\t\t\t{mime_type}\t{sha256sum(src)}\tfail\treturncode={exc.returncode}\n"
+            )
 
     manifest.write_text("".join(lines), encoding="utf-8")
     print(manifest)

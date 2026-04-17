@@ -29,6 +29,7 @@ repo entrypoints:
 - `./scripts/doctor.sh`
 - `./scripts/run_gmail_lab_export.sh ./examples/targets.tsv`
 - `./scripts/run_portal_lab_export.sh ./examples/portal_targets.tsv`
+- `./scripts/rerun_enrichment.py ./runs/<existing-run>` after missing OCR/PDF binaries are installed
 
 artifact contract:
 - `raw/` = provenance-safe extracted files, never renamed in place
@@ -37,6 +38,7 @@ artifact contract:
 - `final/` = canonical filenames with `date__provider__owner__original`
 - `run_manifest.tsv` = per-target execution log
 - `asset_manifest.tsv` = per-file metadata truth layer for downstream ingest
+- `run_manifest.tsv/status` means acquisition only; enrichment lives in `ocr_status`, `pdf_text_status`, `enrichment_status`
 
 date policy:
 - every artifact must end with an `analysis_date`
@@ -55,6 +57,11 @@ owner policy:
   - `weak_owner`
   - `unknown_owner`
 - ambiguous rows must remain explicit
+
+enrichment policy:
+- do not mark a row as failed just because OCR helpers are missing
+- prefer `missing_dependency` over generic `fail` when `tesseract`, `pdftotext`, or `pdftoppm` are absent
+- raw evidence can be `ok` while enrichment is still blocked
 
 safe change rules:
 - prefer adding new provider adapters over complicating the gmail collectors

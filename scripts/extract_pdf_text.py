@@ -6,6 +6,7 @@ import csv
 import json
 import os
 import re
+import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -200,63 +201,92 @@ def try_extract(pdf_path: Path, output_dir: Path, thread_json: dict, provider_js
     context = joined_context(thread_json, provider_json, pdf_path)
     candidates = build_password_candidates(context, provider_json)
     attempted = ["<empty>"] + [f"{redact_password(pwd)} ({source})" for pwd, source in candidates]
+    pdftotext_bin = shutil.which("pdftotext")
+    pdftoppm_bin = shutil.which("pdftoppm")
+    tesseract_bin = shutil.which("tesseract")
+    missing_bins = [name for name, bin_path in (
+        ("pdftotext", pdftotext_bin),
+        ("pdftoppm", pdftoppm_bin),
+        ("tesseract", tesseract_bin),
+    ) if not bin_path]
+    notes_parts: list[str] = []
 
-    ok, text, stderr = pdftotext_extract(pdf_path)
-    if ok and text.strip():
-        txt_path = write_text_output(output_dir, pdf_path, text)
-        return {
-            "source_file": str(pdf_path),
-            "text_txt": str(txt_path),
-            "method": "pdftotext",
-            "password_source": "none",
-            "password_used": "",
-            "candidate_count": str(len(candidates)),
-            "status": "ok_text",
-            "notes": "",
-        }
-
-    attempts = [("", "none")]
-    attempts.extend(candidates)
-    for password, source in attempts[1:]:
-        ok, text, stderr = pdftotext_extract(pdf_path, password=password)
+    stderr = ""
+    if pdftotext_bin:
+        ok, text, stderr = pdftotext_extract(pdf_path)
         if ok and text.strip():
             txt_path = write_text_output(output_dir, pdf_path, text)
             return {
                 "source_file": str(pdf_path),
                 "text_txt": str(txt_path),
-            "method": "pdftotext_password",
-            "password_source": source,
-            "password_used": redact_password(password),
-            "candidate_count": str(len(candidates)),
-            "status": "ok_text",
-            "notes": "",
-            }
-
-    image_dir = output_dir / f"{pdf_path.stem}_pages"
-    for password, source in attempts:
-        image_dir.mkdir(parents=True, exist_ok=True)
-        prefix = image_dir / "page"
-        ok, pdfppm_stderr = pdf_to_images(pdf_path, prefix, password=password)
-        if not ok:
-            continue
-        texts: list[str] = []
-        page_images = sorted(image_dir.glob("page-*.png"))
-        for img in page_images:
-            ocr_ok, ocr_text = ocr_image(img)
-            if ocr_ok and ocr_text.strip():
-                texts.append(ocr_text)
-        if texts:
-            txt_path = write_text_output(output_dir, pdf_path, "\n\n".join(texts))
-            return {
-                "source_file": str(pdf_path),
-                "text_txt": str(txt_path),
-                "method": "pdf_ocr" if not password else "pdf_ocr_password",
-                "password_source": source,
-                "password_used": redact_password(password),
+                "method": "pdftotext",
+                "password_source": "none",
+                "password_used": "",
                 "candidate_count": str(len(candidates)),
-                "status": "ok_ocr",
+                "status": "ok_text",
                 "notes": "",
             }
+    else:
+        notes_parts.append("missing=pdftotext")
+
+    attempts = [("", "none")]
+    attempts.extend(candidates)
+    if pdftotext_bin:
+        for password, source in attempts[1:]:
+            ok, text, stderr = pdftotext_extract(pdf_path, password=password)
+            if ok and text.strip():
+                txt_path = write_text_output(output_dir, pdf_path, text)
+                return {
+                    "source_file": str(pdf_path),
+                    "text_txt": str(txt_path),
+                    "method": "pdftotext_password",
+                    "password_source": source,
+                    "password_used": redact_password(password),
+                    "candidate_count": str(len(candidates)),
+                    "status": "ok_text",
+                    "notes": "",
+                }
+
+    image_dir = output_dir / f"{pdf_path.stem}_pages"
+    if pdftoppm_bin and tesseract_bin:
+        for password, source in attempts:
+            image_dir.mkdir(parents=True, exist_ok=True)
+            prefix = image_dir / "page"
+            ok, pdfppm_stderr = pdf_to_images(pdf_path, prefix, password=password)
+            if not ok:
+                stderr = pdfppm_stderr or stderr
+                continue
+            texts: list[str] = []
+            page_images = sorted(image_dir.glob("page-*.png"))
+            for img in page_images:
+                ocr_ok, ocr_text = ocr_image(img)
+                if ocr_ok and ocr_text.strip():
+                    texts.append(ocr_text)
+            if texts:
+                txt_path = write_text_output(output_dir, pdf_path, "\n\n".join(texts))
+                return {
+                    "source_file": str(pdf_path),
+                    "text_txt": str(txt_path),
+                    "method": "pdf_ocr" if not password else "pdf_ocr_password",
+                    "password_source": source,
+                    "password_used": redact_password(password),
+                    "candidate_count": str(len(candidates)),
+                    "status": "ok_ocr",
+                    "notes": "",
+                }
+    else:
+        if not pdftoppm_bin:
+            notes_parts.append("missing=pdftoppm")
+        if not tesseract_bin:
+            notes_parts.append("missing=tesseract")
+
+    missing_dependency_only = bool(missing_bins) and not pdftotext_bin and (not pdftoppm_bin or not tesseract_bin)
+    if missing_dependency_only:
+        status = "missing_dependency"
+    elif missing_bins and not (pdftoppm_bin and tesseract_bin):
+        status = "missing_dependency"
+    else:
+        status = "fail"
 
     return {
         "source_file": str(pdf_path),
@@ -265,8 +295,8 @@ def try_extract(pdf_path: Path, output_dir: Path, thread_json: dict, provider_js
         "password_source": "",
         "password_used": "",
         "candidate_count": str(len(candidates)),
-        "status": "fail",
-        "notes": "; ".join(filter(None, [stderr, "attempted=" + ", ".join(attempted[:12])]))[:2000],
+        "status": status,
+        "notes": "; ".join(filter(None, [stderr, *notes_parts, "attempted=" + ", ".join(attempted[:12])]))[:2000],
     }
 
 

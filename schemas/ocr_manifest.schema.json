@@ -1,0 +1,14 @@
+{
+  "name": "ocr_manifest.tsv",
+  "kind": "tabular_schema",
+  "description": "Per-image OCR log emitted after raw image download.",
+  "columns": [
+    { "name": "source_file", "type": "absolute_path", "required": true },
+    { "name": "normalized_file", "type": "absolute_path_or_empty", "required": true },
+    { "name": "ocr_txt", "type": "absolute_path_or_empty", "required": true },
+    { "name": "mime_type", "type": "string", "required": true },
+    { "name": "sha256", "type": "string", "required": true },
+    { "name": "status", "type": "string", "required": true, "enum": ["ok", "missing_dependency", "fail"] },
+    { "name": "notes", "type": "string", "required": true }
+  ]
+}

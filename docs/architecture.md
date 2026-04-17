@@ -61,6 +61,7 @@ current boundary:
 responsibility:
 - convert extracted image assets into text
 - produce `ocr_manifest.tsv`
+- classify missing OCR tooling as `missing_dependency`, not as acquisition failure
 
 must not do:
 - choose the final date blindly from any found number
@@ -73,6 +74,7 @@ responsibility:
 - try plain text extraction first
 - if needed, derive password candidates from thread/provider context or env hints
 - fall back to rendering pages + OCR when the PDF is scanned
+- classify absent `pdftotext` / `pdftoppm` / `tesseract` as enrichment debt
 
 must not do:
 - store concrete passwords in manifests
@@ -109,13 +111,19 @@ targets.tsv / portal_targets.tsv
   -> PDF text extraction for PDFs
   -> derive_asset_metadata.py
   -> final/ + asset_manifest.tsv
+
+existing run recovery:
+- `scripts/rerun_enrichment.py` replays only OCR/PDF-text + metadata on an existing `raw/` run
+- use it after installing missing local binaries instead of re-downloading from Gmail
 ```
 
 ## manifest semantics
 
 ### run_manifest.tsv
 - one row per target / query
-- execution status only
+- `status` = acquisition only
+- `ocr_status` / `pdf_text_status` / `enrichment_status` = derivative lanes
+- missing local binaries must not downgrade `status` from `ok` to failure
 
 ### asset_manifest.tsv
 - one row per concrete file
