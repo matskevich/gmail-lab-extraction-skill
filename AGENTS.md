@@ -23,6 +23,14 @@ current truth:
 - metadata derivation for `analysis_date` and `owner`: working on gmail runs
 - portal-backed invitro export for anonymous result links: working
 - long-term production direction: `gmail api first`, browser fallback second
+- python package substrate:
+  - `gmail_lab/core/store/state.py`
+  - `gmail_lab/core/store/messages.py`
+  - `gmail_lab/core/store/evidence.py`
+  - `gmail_lab/core/manifests/discovery.py`
+  - `gmail_lab/core/manifests/evidence.py`
+  - `gmail_lab/transports/cli.py`
+  - this layer is the start of the agent-first replayable core; it should stay deterministic and log-independent
 
 known sharp edge:
 - historical partial-ready mails can regress if attachment controls hydrate only after scroll or delayed Gmail rendering
@@ -43,6 +51,7 @@ repo entrypoints:
 
 artifact contract:
 - `discovery_manifest.tsv` = per-target mailbox discovery truth
+- `evidence_manifest.tsv` = per-file raw evidence truth for the new local substrate
 - `raw/` = provenance-safe extracted files, never renamed in place
 - `ocr/` = OCR derivatives for image assets
 - `pdf_text/` = extracted or OCR'd text for PDF assets, including password-hinted PDFs

@@ -1,0 +1,17 @@
+{
+  "name": "analysis_manifest.tsv",
+  "lane": "promotion",
+  "kind": "tabular_schema",
+  "description": "Canonical downstream analysis rows materialized from evidence plus claims.",
+  "columns": [
+    { "name": "analysis_id", "type": "string", "required": true },
+    { "name": "provider", "type": "string", "required": true },
+    { "name": "category", "type": "string", "required": true },
+    { "name": "canonical_file", "type": "absolute_path", "required": true },
+    { "name": "owner_status", "type": "string", "required": true, "enum": ["confirmed_owner", "likely_owner", "weak_owner", "unknown_owner", "non_owner"] },
+    { "name": "sample_draw_datetime", "type": "datetime_or_empty", "required": true },
+    { "name": "analysis_date", "type": "date", "format": "YYYY-MM-DD", "required": true },
+    { "name": "confidence", "type": "string", "required": true, "enum": ["high", "medium", "low"] },
+    { "name": "status", "type": "string", "required": true, "enum": ["active", "context_only", "superseded", "ambiguous"] }
+  ]
+}

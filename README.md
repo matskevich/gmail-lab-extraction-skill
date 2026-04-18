@@ -21,6 +21,15 @@ what it does:
 - derives `analysis_date` + `owner` metadata and materializes canonical filenames in `final/`
 - writes run logs, manifests, and per-target outputs
 
+python substrate status:
+- `gmail_lab/` now contains the first `api-first` local substrate for:
+  - app layout under `~/.gmail-lab/`
+  - `state.db`
+  - message archive
+  - evidence archive
+  - discovery/evidence manifests
+- this is the foundation for the future `gmail api first` lane; current live extraction still happens through the legacy scripts
+
 what it does not do:
 - external site login automation
 - guaranteed parsing of every encrypted or vector-locked pdf
@@ -70,6 +79,13 @@ check environment:
 
 ```bash
 ./scripts/doctor.sh
+```
+
+bootstrap the local-first substrate:
+
+```bash
+gmail-lab init
+gmail-lab identity-status
 ```
 
 run a discovery-only pass before raw acquisition:

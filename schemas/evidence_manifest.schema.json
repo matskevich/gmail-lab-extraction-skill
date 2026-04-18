@@ -1,0 +1,18 @@
+{
+  "name": "evidence_manifest.tsv",
+  "lane": "gmail_api_substrate",
+  "kind": "tabular_schema",
+  "description": "Per-file evidence rows stored after mailbox-native acquisition.",
+  "columns": [
+    { "name": "line_no", "type": "integer", "required": true },
+    { "name": "mailbox", "type": "string", "required": true },
+    { "name": "message_id", "type": "string", "required": true },
+    { "name": "source_kind", "type": "string", "required": true, "enum": ["attachment", "inline", "portal_pdf", "portal_inline", "unknown"] },
+    { "name": "original_filename", "type": "string", "required": true },
+    { "name": "stored_path", "type": "absolute_path", "required": true },
+    { "name": "mime_type", "type": "string", "required": true },
+    { "name": "size_bytes", "type": "integer", "required": true },
+    { "name": "sha256", "type": "sha256", "required": true },
+    { "name": "created_at", "type": "datetime", "required": true }
+  ]
+}

@@ -4,3 +4,20 @@ data/
 __pycache__/
 *.pyc
 .DS_Store
+
+# python build / env
+.venv/
+venv/
+.env
+*.egg-info/
+build/
+dist/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# secrets (never commit)
+client_secret.json
+token.json
+*.pem
+*.key

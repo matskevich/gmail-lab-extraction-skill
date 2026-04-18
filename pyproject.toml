@@ -1,0 +1,99 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gmail-lab-extractor"
+version = "0.1.0.dev0"
+description = "extract lab results from gmail, feed structured claims to personal health systems and agent workflows"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "dmitry matskevich" }]
+keywords = ["gmail", "lab-results", "health-data", "mcp", "extraction"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Email",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
+dependencies = [
+    "google-api-python-client>=2.120.0",
+    "google-auth-oauthlib>=1.2.0",
+    "google-auth-httplib2>=0.2.0",
+    "keyring>=24.0.0",
+    "click>=8.1.0",
+    "pydantic>=2.6.0",
+    "pyyaml>=6.0.1",
+    "beautifulsoup4>=4.12.0",
+    "python-dateutil>=2.9.0",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.0.0"]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+    "mypy>=1.9.0",
+    "types-pyyaml",
+    "types-python-dateutil",
+]
+
+[project.scripts]
+gmail-lab = "gmail_lab.transports.cli:main"
+
+[project.urls]
+Repository = "https://github.com/matskevich/gmail-lab-extraction-skill"
+Issues = "https://github.com/matskevich/gmail-lab-extraction-skill/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["gmail_lab"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
+ignore = ["E501"] # handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/derive_asset_metadata.py" = ["RUF001", "UP035"]
+"scripts/extract_pdf_text.py" = ["SIM114"]
+"scripts/rerun_enrichment.py" = ["I001"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q --strict-markers"
+markers = [
+    "e2e: live tests against real gmail (skipped by default)",
+    "integration: integration tests over fixtures",
+    "unit: pure unit tests",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
