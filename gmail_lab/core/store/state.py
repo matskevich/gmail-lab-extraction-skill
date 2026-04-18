@@ -4,7 +4,7 @@ import sqlite3
 from dataclasses import asdict
 from pathlib import Path
 
-from gmail_lab.core.models import EvidenceRecord, MailboxConnection, MessageRecord
+from gmail_lab.core.models import ClaimRecord, EvidenceRecord, MailboxConnection, MessageRecord
 
 
 class SqliteStateStore:
@@ -74,10 +74,35 @@ class SqliteStateStore:
                     sha256 TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS claims (
+                    analysis_id TEXT PRIMARY KEY,
+                    mailbox TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    evidence_sha256 TEXT NOT NULL,
+                    evidence_path TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    provider_source TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    owner_name TEXT NOT NULL,
+                    owner_status TEXT NOT NULL,
+                    owner_source TEXT NOT NULL,
+                    owner_evidence TEXT NOT NULL,
+                    analysis_date TEXT NOT NULL,
+                    analysis_date_source TEXT NOT NULL,
+                    sample_draw_date TEXT NOT NULL,
+                    sample_draw_time TEXT NOT NULL,
+                    sample_draw_datetime TEXT NOT NULL,
+                    sample_draw_status TEXT NOT NULL,
+                    sample_draw_source TEXT NOT NULL,
+                    sample_draw_evidence TEXT NOT NULL,
+                    confidence TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 """
             )
             conn.execute(
-                "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '1')"
+                "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('schema_version', '2')"
             )
 
     def upsert_mailbox_connection(self, connection: MailboxConnection) -> None:
@@ -189,3 +214,55 @@ class SqliteStateStore:
         with self.connect() as conn:
             rows = conn.execute(query, params).fetchall()
         return [EvidenceRecord(**dict(row)) for row in rows]
+
+    def upsert_claim(self, claim: ClaimRecord) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO claims (
+                    analysis_id, mailbox, message_id, evidence_sha256, evidence_path, provider, provider_source,
+                    category, owner_name, owner_status, owner_source, owner_evidence, analysis_date,
+                    analysis_date_source, sample_draw_date, sample_draw_time, sample_draw_datetime,
+                    sample_draw_status, sample_draw_source, sample_draw_evidence, confidence, created_at
+                ) VALUES (
+                    :analysis_id, :mailbox, :message_id, :evidence_sha256, :evidence_path, :provider, :provider_source,
+                    :category, :owner_name, :owner_status, :owner_source, :owner_evidence, :analysis_date,
+                    :analysis_date_source, :sample_draw_date, :sample_draw_time, :sample_draw_datetime,
+                    :sample_draw_status, :sample_draw_source, :sample_draw_evidence, :confidence, :created_at
+                )
+                ON CONFLICT(analysis_id) DO UPDATE SET
+                    mailbox = excluded.mailbox,
+                    message_id = excluded.message_id,
+                    evidence_sha256 = excluded.evidence_sha256,
+                    evidence_path = excluded.evidence_path,
+                    provider = excluded.provider,
+                    provider_source = excluded.provider_source,
+                    category = excluded.category,
+                    owner_name = excluded.owner_name,
+                    owner_status = excluded.owner_status,
+                    owner_source = excluded.owner_source,
+                    owner_evidence = excluded.owner_evidence,
+                    analysis_date = excluded.analysis_date,
+                    analysis_date_source = excluded.analysis_date_source,
+                    sample_draw_date = excluded.sample_draw_date,
+                    sample_draw_time = excluded.sample_draw_time,
+                    sample_draw_datetime = excluded.sample_draw_datetime,
+                    sample_draw_status = excluded.sample_draw_status,
+                    sample_draw_source = excluded.sample_draw_source,
+                    sample_draw_evidence = excluded.sample_draw_evidence,
+                    confidence = excluded.confidence,
+                    created_at = excluded.created_at
+                """,
+                asdict(claim),
+            )
+
+    def list_claims(self, mailbox: str | None = None) -> list[ClaimRecord]:
+        query = "SELECT analysis_id, mailbox, message_id, evidence_sha256, evidence_path, provider, provider_source, category, owner_name, owner_status, owner_source, owner_evidence, analysis_date, analysis_date_source, sample_draw_date, sample_draw_time, sample_draw_datetime, sample_draw_status, sample_draw_source, sample_draw_evidence, confidence, created_at FROM claims"
+        params: tuple[str, ...] = ()
+        if mailbox:
+            query += " WHERE mailbox = ?"
+            params = (mailbox,)
+        query += " ORDER BY analysis_date, mailbox, message_id, analysis_id"
+        with self.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [ClaimRecord(**dict(row)) for row in rows]

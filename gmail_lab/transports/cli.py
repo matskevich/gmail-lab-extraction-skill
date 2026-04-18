@@ -9,8 +9,11 @@ from typing import cast
 import click
 
 from gmail_lab import __version__
+from gmail_lab.core.claims.derive import build_claim_record, claim_to_analysis_row
 from gmail_lab.core.config import load_config, resolve_root, save_config
 from gmail_lab.core.layout import AppPaths
+from gmail_lab.core.manifests.analyses import write_analysis_manifest
+from gmail_lab.core.manifests.claims import write_claims_manifest
 from gmail_lab.core.manifests.discovery import write_discovery_manifest
 from gmail_lab.core.manifests.evidence import write_evidence_manifest
 from gmail_lab.core.models import MailboxConnection, MessageRecord
@@ -261,6 +264,67 @@ def emit_evidence_manifest_command(ctx: click.Context, mailbox: str | None, outp
     state_store.initialize()
     evidence_rows = state_store.list_evidence(mailbox=mailbox)
     written = write_evidence_manifest(output, evidence_rows)
+    click.echo(str(written))
+
+
+@main.command("derive-claims")
+@click.option("--mailbox", default=None)
+@click.pass_context
+def derive_claims_command(ctx: click.Context, mailbox: str | None) -> None:
+    paths = _paths_from_context(ctx)
+    paths.ensure()
+    state_store = SqliteStateStore(paths.state_db)
+    state_store.initialize()
+    config = load_config(paths.root)
+    messages = {
+        (message.mailbox, message.message_id): message
+        for message in state_store.list_messages(mailbox=mailbox)
+    }
+    evidence_rows = state_store.list_evidence(mailbox=mailbox)
+    derived = []
+    for evidence in evidence_rows:
+        claim = build_claim_record(
+            config=config,
+            message=messages.get((evidence.mailbox, evidence.message_id)),
+            evidence=evidence,
+        )
+        state_store.upsert_claim(claim)
+        derived.append(claim.analysis_id)
+    click.echo(
+        json.dumps(
+            {
+                "derived_claims": len(derived),
+                "analysis_ids": derived,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@main.command("emit-claims-manifest")
+@click.option("--mailbox", default=None)
+@click.option("--output", required=True, type=click.Path(path_type=Path))
+@click.pass_context
+def emit_claims_manifest_command(ctx: click.Context, mailbox: str | None, output: Path) -> None:
+    paths = _paths_from_context(ctx)
+    state_store = SqliteStateStore(paths.state_db)
+    state_store.initialize()
+    claims = state_store.list_claims(mailbox=mailbox)
+    written = write_claims_manifest(output, claims)
+    click.echo(str(written))
+
+
+@main.command("emit-analysis-manifest")
+@click.option("--mailbox", default=None)
+@click.option("--output", required=True, type=click.Path(path_type=Path))
+@click.pass_context
+def emit_analysis_manifest_command(ctx: click.Context, mailbox: str | None, output: Path) -> None:
+    paths = _paths_from_context(ctx)
+    state_store = SqliteStateStore(paths.state_db)
+    state_store.initialize()
+    claims = state_store.list_claims(mailbox=mailbox)
+    written = write_analysis_manifest(output, [claim_to_analysis_row(claim) for claim in claims])
     click.echo(str(written))
 
 

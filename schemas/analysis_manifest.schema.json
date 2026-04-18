@@ -8,6 +8,7 @@
     { "name": "provider", "type": "string", "required": true },
     { "name": "category", "type": "string", "required": true },
     { "name": "canonical_file", "type": "absolute_path", "required": true },
+    { "name": "owner_name", "type": "string", "required": true },
     { "name": "owner_status", "type": "string", "required": true, "enum": ["confirmed_owner", "likely_owner", "weak_owner", "unknown_owner", "non_owner"] },
     { "name": "sample_draw_datetime", "type": "datetime_or_empty", "required": true },
     { "name": "analysis_date", "type": "date", "format": "YYYY-MM-DD", "required": true },

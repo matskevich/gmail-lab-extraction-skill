@@ -7,9 +7,15 @@
     { "name": "analysis_id", "type": "string", "required": true },
     { "name": "mailbox", "type": "string", "required": true },
     { "name": "message_id", "type": "string", "required": true },
+    { "name": "evidence_sha256", "type": "string", "required": true },
+    { "name": "evidence_path", "type": "absolute_path", "required": true },
+    { "name": "provider", "type": "string", "required": true },
+    { "name": "provider_source", "type": "string", "required": true },
+    { "name": "category", "type": "string", "required": true },
     { "name": "owner_name", "type": "string", "required": true },
     { "name": "owner_status", "type": "string", "required": true, "enum": ["confirmed_owner", "likely_owner", "weak_owner", "unknown_owner", "non_owner"] },
     { "name": "owner_source", "type": "string", "required": true },
+    { "name": "owner_evidence", "type": "string", "required": true },
     { "name": "analysis_date", "type": "date", "format": "YYYY-MM-DD", "required": true },
     { "name": "analysis_date_source", "type": "string", "required": true },
     { "name": "sample_draw_date", "type": "date_or_empty", "format": "YYYY-MM-DD", "required": true },
@@ -17,6 +23,8 @@
     { "name": "sample_draw_datetime", "type": "datetime_or_empty", "required": true },
     { "name": "sample_draw_status", "type": "string", "required": true, "enum": ["direct", "inferred_date_only", "proxy_analysis_date", "missing"] },
     { "name": "sample_draw_source", "type": "string", "required": true },
-    { "name": "confidence", "type": "string", "required": true, "enum": ["high", "medium", "low"] }
+    { "name": "sample_draw_evidence", "type": "string", "required": true },
+    { "name": "confidence", "type": "string", "required": true, "enum": ["high", "medium", "low"] },
+    { "name": "created_at", "type": "datetime", "required": true }
   ]
 }

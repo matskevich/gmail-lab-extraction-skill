@@ -51,3 +51,29 @@ class EvidenceRecord:
     size_bytes: int
     sha256: str
     created_at: str
+
+
+@dataclass(frozen=True)
+class ClaimRecord:
+    analysis_id: str
+    mailbox: str
+    message_id: str
+    evidence_sha256: str
+    evidence_path: str
+    provider: str
+    provider_source: str
+    category: str
+    owner_name: str
+    owner_status: str
+    owner_source: str
+    owner_evidence: str
+    analysis_date: str
+    analysis_date_source: str
+    sample_draw_date: str
+    sample_draw_time: str
+    sample_draw_datetime: str
+    sample_draw_status: str
+    sample_draw_source: str
+    sample_draw_evidence: str
+    confidence: str
+    created_at: str

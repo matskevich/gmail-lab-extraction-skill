@@ -27,7 +27,8 @@ python substrate status:
   - `state.db`
   - message archive
   - evidence archive
-  - discovery/evidence manifests
+  - discovery/evidence/claims/analysis manifests
+  - ownership + sample-draw claim derivation
 - this is the foundation for the future `gmail api first` lane; current live extraction still happens through the legacy scripts
 
 what it does not do:
@@ -86,6 +87,14 @@ bootstrap the local-first substrate:
 ```bash
 gmail-lab init
 gmail-lab identity-status
+```
+
+derive claims after messages and evidence are recorded:
+
+```bash
+gmail-lab derive-claims
+gmail-lab emit-claims-manifest --output ./claims_manifest.tsv
+gmail-lab emit-analysis-manifest --output ./analysis_manifest.tsv
 ```
 
 run a discovery-only pass before raw acquisition:
@@ -190,6 +199,26 @@ metadata layer:
   - `owner_source`
   - `owner_status` = `likely_owner|weak_owner|unknown_owner`
   - provider + confidence
+
+claims layer:
+- `claims_manifest.tsv` records:
+  - `owner_name`, `owner_status`, `owner_source`, `owner_evidence`
+  - `analysis_date`, `analysis_date_source`
+  - `sample_draw_date`, `sample_draw_time`, `sample_draw_datetime`
+  - `sample_draw_status`, `sample_draw_source`, `sample_draw_evidence`
+  - provider/category/confidence plus evidence refs
+- `analysis_manifest.tsv` is the thinner downstream view for sinks and agents
+- current owner statuses:
+  - `confirmed_owner`
+  - `likely_owner`
+  - `weak_owner`
+  - `unknown_owner`
+  - `non_owner`
+- current sample-draw statuses:
+  - `direct`
+  - `inferred_date_only`
+  - `proxy_analysis_date`
+  - `missing`
 
 password-protected pdf lane:
 - the runners also create `pdf_text/<target>/pdf_text_manifest.tsv`

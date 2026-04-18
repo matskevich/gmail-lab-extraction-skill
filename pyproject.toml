@@ -77,6 +77,8 @@ ignore = ["E501"] # handled by formatter
 "scripts/derive_asset_metadata.py" = ["RUF001", "UP035"]
 "scripts/extract_pdf_text.py" = ["SIM114"]
 "scripts/rerun_enrichment.py" = ["I001"]
+"gmail_lab/core/claims/derive.py" = ["RUF001"]
+"gmail_lab/core/claims/ownership.py" = ["RUF001"]
 
 [tool.ruff.format]
 quote-style = "double"
