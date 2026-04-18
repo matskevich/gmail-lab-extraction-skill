@@ -1,0 +1,4 @@
+# query	needle	mode	min_attachments	min_inline	note
+from:lab@example.com order-123	order-123	auto	1	0	native attachment should land
+from:sender@example.com result	inline-only result	inline	0	2	inline-only medical images should land
+from:provider@example.com report-456	report-456	auto	1	1	mixed thread should preserve both attachment and inline assets

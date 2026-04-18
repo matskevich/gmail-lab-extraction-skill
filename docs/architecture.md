@@ -2,22 +2,26 @@
 
 ## system shape
 
-the repo has 4 layers:
+the repo has 5 layers:
 
-1. extraction
+1. discovery
+- search the mailbox for candidate medical threads
+- distinguish `candidate_attachment`, `candidate_inline_only`, `candidate_portal_only`, `candidate_context_only`
+
+2. extraction
 - gmail collectors fetch bytes from gmail page context via cdp
 - portal runners open a provider result page and fetch bytes there
 
-2. derivation
+3. derivation
 - OCR runs on image assets
 - PDF text extraction runs on normal and password-hinted PDFs
 - metadata derivation assigns `analysis_date`, `owner`, `provider`, and confidence
 
-3. materialization
+4. materialization
 - `final/` gets canonical filenames
 - `asset_manifest.tsv` becomes the bridge to downstream ingest
 
-4. promotion
+5. promotion
 - downstream systems should read `asset_manifest.tsv`, not guess from filenames
 
 ## modules
@@ -29,6 +33,7 @@ the repo has 4 layers:
 responsibility:
 - search gmail
 - open the matching thread
+- warm the thread so below-the-fold attachment controls can hydrate before asset collection
 - fetch visible assets with page-context credentials
 - return:
   - `query`
@@ -104,7 +109,9 @@ important rule:
 ## data flow
 
 ```text
-targets.tsv / portal_targets.tsv
+targets.tsv / portal_targets.tsv / regression_targets.tsv
+  -> discovery / regression corpus
+  -> discovery_manifest.tsv
   -> runner
   -> raw/ + logs/ + run_manifest.tsv
   -> OCR for images
@@ -118,6 +125,15 @@ existing run recovery:
 ```
 
 ## manifest semantics
+
+### discovery_manifest.tsv
+- one row per target / query before raw download
+- `discovery_class` answers what class of thread this is:
+  - `candidate_attachment`
+  - `candidate_inline_only`
+  - `candidate_portal_only`
+  - `candidate_context_only`
+- this is the right surface for mailbox completeness audits
 
 ### run_manifest.tsv
 - one row per target / query
@@ -142,3 +158,4 @@ existing run recovery:
 - not every mail with a result link is extractable by the gmail layer
 - not every provider page exposes a stable downloadable response
 - a clean canonical filename does not mean the date is direct evidence; use the source/status columns
+- discovery completeness still depends on maintaining a real regression corpus of historical cases

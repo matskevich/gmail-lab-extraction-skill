@@ -53,7 +53,7 @@ function gmailAssetDiagnosticsExpression() {
         .map(line => sanitizeName(line))
         .filter(line => /\\.(?:pdf|jpe?g|png|gif|webp|tiff?)$/i.test(line));
       const attachmentMatches = Array.from(
-        bodyText.matchAll(/[^\n]{1,220}?\\.(?:pdf|jpe?g|png|gif|webp|tiff?)/ig)
+        bodyText.matchAll(/[^\\n]{1,220}?\\.(?:pdf|jpe?g|png|gif|webp|tiff?)/ig)
       ).map(match => sanitizeName(match[0]));
       const attachmentCandidateNames = unique([...attachmentLines, ...attachmentMatches]).slice(0, 30);
       const inlineCandidateCount = Array.from(document.querySelectorAll('img[src]')).filter(img => {
@@ -82,6 +82,29 @@ async function waitFor(session, checkExpression, timeoutMs = 15000, intervalMs =
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new Error(`timeout waiting for condition: ${checkExpression}`);
+}
+
+async function warmThreadForAssetHydration(session, maxPasses = 8, settleMs = 900) {
+  let lastHeight = 0;
+  let stablePasses = 0;
+  for (let i = 0; i < maxPasses; i += 1) {
+    const nextHeight = await session.evaluate(`
+      (() => {
+        const doc = document.scrollingElement || document.body || document.documentElement;
+        if (!doc) return 0;
+        window.scrollTo(0, doc.scrollHeight || 0);
+        return doc.scrollHeight || 0;
+      })()
+    `);
+    await new Promise((r) => setTimeout(r, settleMs));
+    if (nextHeight > 0 && nextHeight === lastHeight) {
+      stablePasses += 1;
+      if (stablePasses >= 2) break;
+    } else {
+      stablePasses = 0;
+      lastHeight = nextHeight;
+    }
+  }
 }
 
 async function writeUniqueFile(filename, bytesBase64) {
@@ -130,6 +153,7 @@ try {
     `);
 
     await new Promise((r) => setTimeout(r, 1500));
+    await warmThreadForAssetHydration(session);
     const diagnosticsExpression = gmailAssetDiagnosticsExpression();
     try {
       await waitFor(
@@ -161,6 +185,12 @@ try {
         // Fall through with diagnostics captured below; caller can inspect counts.
       }
       await new Promise((r) => setTimeout(r, 1500));
+      diagnostics = await session.evaluate(diagnosticsExpression);
+    }
+
+    if (diagnostics.downloadUrlCount === 0 && diagnostics.inlineCandidateCount > 0) {
+      await warmThreadForAssetHydration(session, 5, 1000);
+      await new Promise((r) => setTimeout(r, 1000));
       diagnostics = await session.evaluate(diagnosticsExpression);
     }
 

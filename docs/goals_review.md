@@ -3,20 +3,22 @@
 ## original goals
 
 1. find analyses in gmail reliably
-2. extract gmail-native attachments
-3. extract inline image-based results
-4. support portal-linked results where possible
-5. OCR image results
-6. handle password-protected PDFs when the password can be inferred or supplied
-7. guarantee an `analysis_date` for every artifact
-8. capture whose result it is
-9. package the work as a reusable skill/repo for other agents
+2. keep historical discovery completeness explicit, including partial-ready mails
+3. extract gmail-native attachments
+4. extract inline image-based results
+5. support portal-linked results where possible
+6. OCR image results
+7. handle password-protected PDFs when the password can be inferred or supplied
+8. guarantee an `analysis_date` for every artifact
+9. capture whose result it is
+10. package the work as a reusable skill/repo for other agents
 
 ## current status
 
 ### green
 - `gmail search -> thread -> native attachments`
 - `gmail search -> thread -> inline image assets`
+- live regression runner for known historical cases
 - OCR for image assets
 - password-hinted PDF text extraction with OCR fallback
 - reproducible runs with `run_manifest.tsv`
@@ -27,6 +29,7 @@
 - reusable repo + skill structure
 
 ### yellow
+- discovery still depends on maintaining a regression corpus of real historical mails
 - `analysis_date` is sometimes inferred from gmail thread date, not direct from artifact
 - `owner` can still be `weak_owner` or `unknown_owner` on forwarded / context-only mails
 - provider detection is heuristic outside explicit provider hints
@@ -47,6 +50,7 @@
 1. add one more provider adapter beyond invitro anonymous links
 2. add provider-specific direct date parsers where the portal page exposes collection/result dates
 3. improve stronger owner verification beyond thread/title heuristics
+4. add a first-class discovery manifest instead of keeping discovery only in prose + regression targets
 
 ## what should wait until v2
 

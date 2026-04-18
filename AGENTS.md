@@ -8,9 +8,12 @@ purpose:
 
 read this first if you are a new agent:
 1. `README.md`
-2. `docs/architecture.md`
-3. `docs/goals_review.md`
-4. `schemas/*.schema.json`
+2. `docs/api_first_architecture.md`
+3. `docs/architecture.md`
+4. `docs/completeness_framework.md`
+5. `docs/test_strategy.md`
+6. `docs/goals_review.md`
+7. `schemas/*.schema.json`
 
 current truth:
 - gmail native attachments: working
@@ -19,6 +22,11 @@ current truth:
 - password-hinted PDF text extraction: working
 - metadata derivation for `analysis_date` and `owner`: working on gmail runs
 - portal-backed invitro export for anonymous result links: working
+- long-term production direction: `gmail api first`, browser fallback second
+
+known sharp edge:
+- historical partial-ready mails can regress if attachment controls hydrate only after scroll or delayed Gmail rendering
+- keep old cases in a regression corpus; one recent green smoke run is not enough
 
 non-goals:
 - this repo is not a generic browser automation framework
@@ -27,17 +35,21 @@ non-goals:
 
 repo entrypoints:
 - `./scripts/doctor.sh`
+- `./scripts/run_gmail_discovery.sh ./examples/targets.tsv`
 - `./scripts/run_gmail_lab_export.sh ./examples/targets.tsv`
+- `./scripts/run_regression_suite.sh ./examples/regression_targets.tsv`
 - `./scripts/run_portal_lab_export.sh ./examples/portal_targets.tsv`
 - `./scripts/rerun_enrichment.py ./runs/<existing-run>` after missing OCR/PDF binaries are installed
 
 artifact contract:
+- `discovery_manifest.tsv` = per-target mailbox discovery truth
 - `raw/` = provenance-safe extracted files, never renamed in place
 - `ocr/` = OCR derivatives for image assets
 - `pdf_text/` = extracted or OCR'd text for PDF assets, including password-hinted PDFs
 - `final/` = canonical filenames with `date__provider__owner__original`
 - `run_manifest.tsv` = per-target execution log
 - `asset_manifest.tsv` = per-file metadata truth layer for downstream ingest
+- `discovery_manifest.tsv` must exist before claiming mailbox completeness
 - `run_manifest.tsv/status` means acquisition only; enrichment lives in `ocr_status`, `pdf_text_status`, `enrichment_status`
 
 date policy:

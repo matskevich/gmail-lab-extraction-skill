@@ -4,7 +4,10 @@ repo + codex skill for extracting gmail lab/result assets from a logged-in chrom
 
 agent handoff docs:
 - `AGENTS.md`
+- `docs/api_first_architecture.md`
 - `docs/architecture.md`
+- `docs/completeness_framework.md`
+- `docs/test_strategy.md`
 - `docs/goals_review.md`
 - `docs/agent_patterns.md`
 - `schemas/*.schema.json`
@@ -27,6 +30,17 @@ truthful claim:
 - this repo can pull all analyses that are actually extractable from gmail surface
 - for supported providers, it can also follow tokenized portal links from the email and export the result pdf without manual browser clicks
 - it still does not solve arbitrary portal-only cases that require a full username/password/2fa login flow
+
+product direction:
+- production should be `gmail api first`
+- browser/cdp should remain a fallback and debugging lane
+- see `docs/api_first_architecture.md`
+
+completeness rule:
+- historical recovery has two separate goals:
+  - `discovery`: prove that candidate mails exist
+  - `acquisition`: land raw bytes locally
+- partial-ready mails matter for completeness testing even if a later full-ready mail supersedes them in downstream truth
 
 ## install
 
@@ -58,6 +72,12 @@ check environment:
 ./scripts/doctor.sh
 ```
 
+run a discovery-only pass before raw acquisition:
+
+```bash
+./scripts/run_gmail_discovery.sh ./examples/targets.tsv
+```
+
 expected OCR/PDF helpers:
 - `tesseract` for image-heavy email assets and OCR fallback
 - `pdftotext` for text-first PDF extraction
@@ -75,6 +95,12 @@ run a logged, reproducible extraction batch:
 ./scripts/run_gmail_lab_export.sh ./examples/targets.tsv
 ```
 
+run a live regression corpus against known historical cases:
+
+```bash
+./scripts/run_regression_suite.sh ./examples/regression_targets.tsv
+```
+
 re-run only the derivative lanes after installing missing OCR/PDF tools:
 
 ```bash
@@ -89,6 +115,15 @@ that creates:
 - `runs/run-YYYYmmdd-HHMMSS/logs/`
 - `runs/run-YYYYmmdd-HHMMSS/run_manifest.tsv`
 - `runs/run-YYYYmmdd-HHMMSS/asset_manifest.tsv`
+
+discovery-only runs create:
+- `runs/discovery-YYYYmmdd-HHMMSS/discovery_manifest.tsv`
+- `runs/discovery-YYYYmmdd-HHMMSS/logs/`
+
+discovery semantics:
+- `discovery_manifest.tsv` answers `what exists in the mailbox and of what class?`
+- `run_manifest.tsv` answers `what raw bytes actually landed?`
+- these are different questions and must not be collapsed
 
 run manifest semantics:
 - `status` = acquisition only (`ok|extract_fail`)
@@ -207,3 +242,4 @@ python3 "$HOME/.codex/skills/gmail-browser-attachments/scripts/ocr_image_assets.
 
 see [`examples/targets.tsv`](./examples/targets.tsv) for batch input format.
 see [`examples/portal_targets.tsv`](./examples/portal_targets.tsv) for portal-backed export targets.
+see [`examples/regression_targets.tsv`](./examples/regression_targets.tsv) for live regression inputs.

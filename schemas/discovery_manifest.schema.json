@@ -1,0 +1,20 @@
+{
+  "name": "discovery_manifest.tsv",
+  "lane": "gmail_discovery",
+  "kind": "tabular_schema",
+  "description": "Per-target discovery log for gmail mailbox exploration before raw acquisition.",
+  "columns": [
+    { "name": "line_no", "type": "integer", "required": true },
+    { "name": "slug", "type": "string", "required": true },
+    { "name": "discovery_status", "type": "string", "required": true, "enum": ["ok", "discover_fail"] },
+    { "name": "discovery_class", "type": "string", "required": true, "enum": ["candidate_attachment", "candidate_inline_only", "candidate_portal_only", "candidate_context_only", "unknown"] },
+    { "name": "attachment_candidate_count", "type": "integer", "required": true },
+    { "name": "download_url_count", "type": "integer", "required": true },
+    { "name": "inline_candidate_count", "type": "integer", "required": true },
+    { "name": "scanning_for_viruses", "type": "boolean_string", "required": true },
+    { "name": "json_log", "type": "absolute_path", "required": true },
+    { "name": "stderr_log", "type": "absolute_path", "required": true },
+    { "name": "query", "type": "string", "required": true },
+    { "name": "needle", "type": "string", "required": true }
+  ]
+}
