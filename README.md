@@ -3,6 +3,7 @@
 repo + codex skill for extracting gmail lab/result assets from a logged-in chrome session when gmail connector scopes are insufficient or chrome's normal download flow is flaky.
 
 agent handoff docs:
+- `START_HERE_FOR_AGENTS.md`
 - `AGENTS.md`
 - `docs/api_first_architecture.md`
 - `docs/architecture.md`
