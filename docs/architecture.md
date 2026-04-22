@@ -113,7 +113,7 @@ targets.tsv / portal_targets.tsv / regression_targets.tsv
   -> discovery / regression corpus
   -> discovery_manifest.tsv
   -> runner
-  -> raw/ + logs/ + run_manifest.tsv
+  -> raw/ + logs/ + run_manifest.tsv / regression_summary.tsv
   -> OCR for images
   -> PDF text extraction for PDFs
   -> derive_asset_metadata.py
@@ -141,9 +141,20 @@ existing run recovery:
 - `ocr_status` / `pdf_text_status` / `enrichment_status` = derivative lanes
 - missing local binaries must not downgrade `status` from `ok` to failure
 
+### regression_summary.tsv
+- one row per historical regression target
+- operator-facing truth for:
+  - final row status
+  - landed attachment / inline counts
+  - filtered inline noise summary
+  - resolved gmail thread title and href
+- use this file to review whether a live regression was green and clean without reopening every json log
+
 ### asset_manifest.tsv
 - one row per concrete file
 - truth for date / owner / provider / confidence
+- `status=non_result` means the raw file was preserved but intentionally not promoted into `final/`
+- `status=sidecar` means a formal companion file, such as `.sig`, was preserved in `raw/` but not promoted as a clinical result file
 
 ## design choices for agent-friendliness
 

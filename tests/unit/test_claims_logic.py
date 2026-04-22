@@ -7,16 +7,16 @@ from gmail_lab.core.config import IdentityConfig
 
 def test_resolve_owner_confirmed_owner() -> None:
     identity = IdentityConfig(
-        canonical_name="Мацкевич Дмитрий Анатольевич",
-        aliases=["Dzmitry Matskevich", "Dmitry Matskevich"],
+        canonical_name="Иванов Иван Иванович",
+        aliases=["Ivan Ivanov", "John Example"],
     )
     owner_name, owner_status, owner_source = resolve_owner(
         identity=identity,
         text_sources=[
-            ("artifact_text", "Пациент: Мацкевич Дмитрий Анатольевич"),
+            ("artifact_text", "Пациент: Иванов Иван Иванович"),
         ],
     )
-    assert owner_name == "Мацкевич Дмитрий Анатольевич"
+    assert owner_name == "Иванов Иван Иванович"
     assert owner_status == "confirmed_owner"
     assert owner_source == "artifact_text:patient_label"
 

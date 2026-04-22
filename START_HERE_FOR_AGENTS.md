@@ -12,7 +12,7 @@ read this file first.
   - invitro anonymous portal export
   - password-hinted pdf text lane
 - yellow:
-  - browser historical completeness for some old gmail threads
+  - browser historical completeness is only proven on a narrow live smoke corpus
   - live collector regression stability across delayed attachment hydration
 - red:
   - gmail api native discovery/acquisition is not implemented yet
@@ -23,12 +23,21 @@ read this file first.
 1. `README.md`
 2. `AGENTS.md`
 3. `docs/api_first_architecture.md`
-4. `docs/completeness_framework.md`
-5. `docs/test_strategy.md`
-6. `schemas/*.schema.json`
+4. `docs/self_hosted_product.md`
+5. `docs/agent_first_roadmap.md`
+6. `docs/completeness_framework.md`
+7. `docs/test_strategy.md`
+8. `docs/release_checklist.md`
+9. `docs/release_verdict.md`
+10. `schemas/*.schema.json`
 
 ## canonical truths
 
+- product boundary first:
+  - primary user is another ai agent
+  - self-hosted
+  - local-first
+  - operator owns raw evidence on disk
 - evidence first:
   - `raw/`
   - message archive
@@ -55,6 +64,16 @@ for live browser runs:
 ./scripts/run_regression_suite.sh ./examples/regression_targets.tsv
 ```
 
+after a live regression run, inspect `regression_summary.tsv` before claiming the suite was both green and clean.
+
+for the private end-to-end health oracle check, generate gitignored targets from the local health inventory and audit coverage:
+
+```bash
+./scripts/build_health_validation_corpus.py --inventory /path/to/private_inventory.tsv --out-dir ./tmp/health-full-validation-YYYYmmdd
+PORTAL_PATIENT_HINT='<last-name>' ./scripts/run_portal_lab_export.sh ./tmp/health-full-validation-YYYYmmdd/portal_targets.tsv ./tmp/health-full-validation-YYYYmmdd/portal
+./scripts/audit_health_validation.py --oracle ./tmp/health-full-validation-YYYYmmdd/oracle.tsv --export-run ./tmp/health-full-validation-YYYYmmdd/export --portal-run ./tmp/health-full-validation-YYYYmmdd/portal --out ./tmp/health-full-validation-YYYYmmdd/coverage_report.md
+```
+
 for substrate / claims:
 
 ```bash
@@ -71,6 +90,13 @@ historical cmd threads can still regress into inline-only extraction when gmail 
 
 ## immediate next work
 
-1. stabilize `DCKY6078` / old cmd live extraction
-2. implement gmail api native discovery/acquisition
-3. keep browser lane as fallback and portal lane
+1. implement gmail api native discovery/acquisition
+2. replay current enrichment/promotion on api-native evidence
+3. add a live tokenized portal corpus case
+4. keep browser lane as fallback and regression oracle
+
+## release rule
+
+- public examples stay sanitized
+- real mailbox regression targets stay in a gitignored local file such as `tmp/private_regression_targets.tsv`
+- before claiming public-alpha readiness, run [docs/release_checklist.md](docs/release_checklist.md)

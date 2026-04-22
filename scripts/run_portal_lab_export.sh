@@ -26,6 +26,9 @@ PORT="${PORT:-9222}"
 START_CHROME="${START_CHROME:-1}"
 WAIT_SECONDS="${WAIT_SECONDS:-30}"
 STOP_CHROME_ON_EXIT="${STOP_CHROME_ON_EXIT:-1}"
+LOCK_DIR="${TMPDIR:-/tmp}/gmail-lab-cdp-port-${PORT}.lock"
+GLOBAL_PATIENT_HINT="${PORTAL_PATIENT_HINT:-}"
+PROMPT_PORTAL_PATIENT_HINT="${PROMPT_PORTAL_PATIENT_HINT:-1}"
 
 RAW_DIR="$RUN_DIR/raw"
 PDF_TEXT_DIR="$RUN_DIR/pdf_text"
@@ -45,8 +48,20 @@ cleanup() {
   if [[ "$STARTED_CLONE" == "1" && "$STOP_CHROME_ON_EXIT" == "1" && -n "$CHROME_PID" ]]; then
     kill "$CHROME_PID" >/dev/null 2>&1 || true
   fi
+  rm -rf "$LOCK_DIR"
 }
 
+acquire_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "$LOCK_DIR/pid"
+    return 0
+  fi
+  lock_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  echo "cdp lock is already held for port $PORT (pid=${lock_pid:-unknown}); do not run live gmail scripts in parallel" >&2
+  exit 1
+}
+
+acquire_lock
 trap cleanup EXIT INT TERM
 
 {
@@ -171,6 +186,49 @@ else:
 PY
 }
 
+has_missing_patient_hint() {
+  python3 - <<'PY' "$TARGETS_FILE"
+import csv
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    raise SystemExit(0)
+with path.open("r", encoding="utf-8", newline="") as fh:
+    for row in csv.reader(fh, delimiter="\t"):
+        if not row or not "".join(row).strip() or row[0].lstrip().startswith("#"):
+            continue
+        provider = row[0].strip().lower()
+        hint = row[3].strip() if len(row) > 3 else ""
+        if provider == "invitro" and not hint:
+            print("yes")
+            raise SystemExit(0)
+print("no")
+PY
+}
+
+maybe_prompt_patient_hint_once() {
+  if [[ -n "$GLOBAL_PATIENT_HINT" || "$PROMPT_PORTAL_PATIENT_HINT" != "1" ]]; then
+    return
+  fi
+  if [[ "$(has_missing_patient_hint)" != "yes" ]]; then
+    return
+  fi
+  if [[ -r /dev/tty && -w /dev/tty ]]; then
+    printf 'portal patient last-name hint (blank to keep per-row/auto only): ' > /dev/tty
+    IFS= read -r GLOBAL_PATIENT_HINT < /dev/tty || GLOBAL_PATIENT_HINT=""
+  fi
+}
+
+close_target() {
+  local target_id_to_close="${1:-}"
+  local stderr_log_to_use="${2:-/dev/null}"
+  if [[ -n "$target_id_to_close" && -n "$BROWSER_WS_URL" ]]; then
+    node "$SKILL_DIR/scripts/chrome_cdp_close_target.mjs" "$BROWSER_WS_URL" "$target_id_to_close" >>"$stderr_log_to_use" 2>&1 || true
+  fi
+}
+
 if [[ ! -f "$TARGETS_FILE" ]]; then
   echo "missing targets file: $TARGETS_FILE" >&2
   exit 1
@@ -210,6 +268,8 @@ if [[ -z "$GMAIL_WS_URL" || -z "$BROWSER_WS_URL" ]]; then
   exit 1
 fi
 
+maybe_prompt_patient_hint_once
+
 line_no=0
 while IFS=$'\t' read -r provider locator row_needle patient_hint; do
   [[ -z "${provider// }" ]] && continue
@@ -229,6 +289,12 @@ while IFS=$'\t' read -r provider locator row_needle patient_hint; do
   pdf_text_status="not_applicable"
   portal_url=""
   patient_hint="${patient_hint:-}"
+  target_id=""
+  retry_target_id=""
+
+  if [[ -z "$patient_hint" && -n "$GLOBAL_PATIENT_HINT" ]]; then
+    patient_hint="$GLOBAL_PATIENT_HINT"
+  fi
 
   if ! node "$REPO_ROOT/scripts/gmail_collect_portal_links.mjs" "$GMAIL_WS_URL" "$locator" "${row_needle:-}" >"$thread_json" 2>"$stderr_log"; then
     row_status="thread_fail"
@@ -237,6 +303,7 @@ while IFS=$'\t' read -r provider locator row_needle patient_hint; do
   if [[ "$row_status" == "ok" ]]; then
     portal_url="$(python3 - <<'PY' "$thread_json" "$provider"
 import json, sys
+from urllib.parse import urlparse, parse_qs
 path, provider = sys.argv[1], sys.argv[2].lower()
 with open(path, "r", encoding="utf-8") as fh:
     data = json.load(fh)
@@ -244,12 +311,15 @@ links = data.get("links", [])
 for item in links:
     href = item.get("href", "")
     if provider == "invitro" and ("lk.invitro.ru" in href or "lk3.invitro.ru" in href):
-        print(href)
-        break
+        parsed = urlparse(href)
+        query = parse_qs(parsed.query)
+        if query.get("key"):
+            print(href)
+            break
 PY
 )"
     if [[ -z "$portal_url" ]]; then
-      row_status="portal_link_missing"
+      row_status="portal_link_missing_or_non_tokenized"
     fi
   fi
 
@@ -292,7 +362,18 @@ PY
     case "${provider:l}" in
       invitro)
         if ! node "$REPO_ROOT/providers/invitro_anon_result_from_link.mjs" "$portal_ws_url" "$target_raw" "${patient_hint:-}" >"$provider_json" 2>>"$stderr_log"; then
-          row_status="provider_fail"
+          echo "provider adapter failed; retrying once with a fresh portal target" >>"$stderr_log"
+          close_target "$target_id" "$stderr_log"
+          target_id=""
+          retry_target_json="$(node "$SKILL_DIR/scripts/chrome_cdp_create_target.mjs" "$BROWSER_WS_URL" "$portal_url" 2>>"$stderr_log" || true)"
+          retry_target_id="$(printf '%s' "$retry_target_json" | python3 -c 'import json,sys; text=sys.stdin.read().strip(); print(json.loads(text)["targetId"]) if text else None' 2>/dev/null || true)"
+          retry_portal_ws_url=""
+          if [[ -n "$retry_target_id" ]]; then
+            retry_portal_ws_url="$(resolve_page_ws_url "$retry_target_id" || true)"
+          fi
+          if [[ -z "$retry_target_id" || -z "${retry_portal_ws_url:-}" ]] || ! node "$REPO_ROOT/providers/invitro_anon_result_from_link.mjs" "$retry_portal_ws_url" "$target_raw" "${patient_hint:-}" >"$provider_json" 2>>"$stderr_log"; then
+            row_status="provider_fail"
+          fi
         fi
         ;;
       *)
@@ -315,6 +396,9 @@ PY
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$line_no" "$provider" "$locator" "${row_needle:-}" "${patient_hint:-}" "$portal_url" "$row_status" "$pdf_text_status" "$enrichment_status" "$target_raw" "$pdf_text_manifest" "$thread_json" "$provider_json" "$stderr_log" \
     >> "$MANIFEST_TSV"
+
+  close_target "$target_id" "$stderr_log"
+  close_target "$retry_target_id" "$stderr_log"
 done < "$TARGETS_FILE"
 
 python3 "$REPO_ROOT/scripts/derive_asset_metadata.py" "$RUN_DIR" >"$LOG_DIR/asset_metadata.stdout.log" 2>"$LOG_DIR/asset_metadata.stderr.log" || true

@@ -84,9 +84,9 @@ the main failure classes are:
 5. promotion drift
 - raw evidence exists, but downstream truth layer never gets updated
 
-## why `DCKY28207` matters
+## why old partial-ready mails matter
 
-`DCKY28207` is a good regression case because:
+old partial-ready result mails are good regression cases because:
 - it is old
 - it has multiple partial-ready mails
 - attachment preview can appear before raw attachment controls are hydrated

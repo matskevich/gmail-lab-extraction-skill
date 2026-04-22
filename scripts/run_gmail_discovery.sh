@@ -23,6 +23,7 @@ print(Path(sys.argv[1]).expanduser().resolve())
 PY
 )"
 PORT="${PORT:-9222}"
+LOCK_DIR="${TMPDIR:-/tmp}/gmail-lab-cdp-port-${PORT}.lock"
 
 LOG_DIR="$RUN_DIR/logs"
 MANIFEST_TSV="$RUN_DIR/discovery_manifest.tsv"
@@ -30,6 +31,23 @@ META_TXT="$RUN_DIR/run_meta.txt"
 SMOKE_LOG="$LOG_DIR/smoke_check.log"
 
 mkdir -p "$LOG_DIR"
+
+acquire_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "$LOCK_DIR/pid"
+    return 0
+  fi
+  lock_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  echo "cdp lock is already held for port $PORT (pid=${lock_pid:-unknown}); do not run live gmail scripts in parallel" >&2
+  exit 1
+}
+
+release_lock() {
+  rm -rf "$LOCK_DIR"
+}
+
+acquire_lock
+trap release_lock EXIT INT TERM
 
 {
   echo "run_dir=$RUN_DIR"

@@ -1,14 +1,17 @@
 # gmail-lab-extraction-skill
 
-repo + codex skill for extracting gmail lab/result assets from a logged-in chrome session when gmail connector scopes are insufficient or chrome's normal download flow is flaky.
+agent-first self-hosted open-source toolkit for exporting lab/result history from gmail onto a local computer, preserving raw evidence and deriving usable metadata locally.
 
 agent handoff docs:
 - `START_HERE_FOR_AGENTS.md`
 - `AGENTS.md`
 - `docs/api_first_architecture.md`
+- `docs/self_hosted_product.md`
 - `docs/architecture.md`
 - `docs/completeness_framework.md`
 - `docs/test_strategy.md`
+- `docs/release_checklist.md`
+- `docs/release_verdict.md`
 - `docs/goals_review.md`
 - `docs/agent_patterns.md`
 - `schemas/*.schema.json`
@@ -21,6 +24,10 @@ what it does:
 - extracts text from normal and password-hinted PDFs, with OCR fallback for scanned PDFs
 - derives `analysis_date` + `owner` metadata and materializes canonical filenames in `final/`
 - writes run logs, manifests, and per-target outputs
+
+who it is for:
+- ai agents that need a replayable filesystem + manifest contract instead of ad hoc browser clicking
+- human operators who run the tool locally against their own gmail and want to keep the evidence on disk
 
 python substrate status:
 - `gmail_lab/` now contains the first `api-first` local substrate for:
@@ -36,16 +43,19 @@ what it does not do:
 - external site login automation
 - guaranteed parsing of every encrypted or vector-locked pdf
 - generic provider support for every lab portal
+- hosted multi-tenant sync
 
 truthful claim:
-- this repo can pull all analyses that are actually extractable from gmail surface
+- this repo can pull analyses that are actually extractable from gmail surface and lay them out locally with explicit provenance + metadata status
 - for supported providers, it can also follow tokenized portal links from the email and export the result pdf without manual browser clicks
 - it still does not solve arbitrary portal-only cases that require a full username/password/2fa login flow
+- current release verdict: `browser-first self-hosted alpha`; see `docs/release_verdict.md`
 
 product direction:
+- product boundary: self-hosted, local-first, agent-first, operator-controlled
 - production should be `gmail api first`
 - browser/cdp should remain a fallback and debugging lane
-- see `docs/api_first_architecture.md`
+- see `docs/self_hosted_product.md`, `docs/agent_first_roadmap.md`, and `docs/api_first_architecture.md`
 
 completeness rule:
 - historical recovery has two separate goals:
@@ -115,6 +125,39 @@ on macOS the practical install is usually:
 brew install tesseract poppler
 ```
 
+## quick self-hosted path
+
+for a new agent/operator pair, the shortest honest path is:
+
+1. prepare a small target file, for example `./tmp/my_targets.tsv`
+2. start the chrome cdp clone by running the export script or the bundled skill helper
+3. run one logged export into a local run directory
+4. inspect the manifests before trusting the final filenames
+
+minimal path:
+
+```bash
+mkdir -p ./tmp
+cp ./examples/targets.tsv ./tmp/my_targets.tsv
+./scripts/run_gmail_lab_export.sh ./tmp/my_targets.tsv ./runs/my-first-run
+```
+
+after the run, inspect:
+- `./runs/my-first-run/run_manifest.tsv`
+- `./runs/my-first-run/asset_manifest.tsv`
+- `./runs/my-first-run/raw/`
+- `./runs/my-first-run/final/`
+
+if you are testing historical mailbox recovery rather than just one export, also run:
+
+```bash
+./scripts/run_regression_suite.sh ./tmp/private_regression_targets.tsv ./tmp/live-regression
+```
+
+then inspect:
+- `./tmp/live-regression/regression_manifest.tsv`
+- `./tmp/live-regression/regression_summary.tsv`
+
 run a logged, reproducible extraction batch:
 
 ```bash
@@ -125,6 +168,21 @@ run a live regression corpus against known historical cases:
 
 ```bash
 ./scripts/run_regression_suite.sh ./examples/regression_targets.tsv
+```
+
+for real mailbox validation, keep the actual targets in a gitignored local file such as `tmp/private_regression_targets.tsv` instead of committing personal order ids into `examples/`.
+
+each regression run also writes `regression_summary.tsv`, which condenses per-case pass/fail, landed assets, filtered inline noise, and the resolved gmail thread into one agent-readable table.
+
+for a full private validation against the user's personal health lab inventory:
+
+```bash
+./scripts/build_health_validation_corpus.py --inventory /path/to/private_inventory.tsv --out-dir ./tmp/health-full-validation-YYYYmmdd
+./scripts/run_gmail_discovery.sh ./tmp/health-full-validation-YYYYmmdd/gmail_targets.tsv ./tmp/health-full-validation-YYYYmmdd/discovery
+./scripts/run_regression_suite.sh ./tmp/health-full-validation-YYYYmmdd/regression_targets.tsv ./tmp/health-full-validation-YYYYmmdd/regression
+./scripts/run_gmail_lab_export.sh ./tmp/health-full-validation-YYYYmmdd/gmail_targets.tsv ./tmp/health-full-validation-YYYYmmdd/export
+PORTAL_PATIENT_HINT='<last-name>' ./scripts/run_portal_lab_export.sh ./tmp/health-full-validation-YYYYmmdd/portal_targets.tsv ./tmp/health-full-validation-YYYYmmdd/portal
+./scripts/audit_health_validation.py --oracle ./tmp/health-full-validation-YYYYmmdd/oracle.tsv --export-run ./tmp/health-full-validation-YYYYmmdd/export --portal-run ./tmp/health-full-validation-YYYYmmdd/portal --out ./tmp/health-full-validation-YYYYmmdd/coverage_report.md
 ```
 
 re-run only the derivative lanes after installing missing OCR/PDF tools:
@@ -146,9 +204,16 @@ discovery-only runs create:
 - `runs/discovery-YYYYmmdd-HHMMSS/discovery_manifest.tsv`
 - `runs/discovery-YYYYmmdd-HHMMSS/logs/`
 
+regression runs create:
+- `runs/regression-YYYYmmdd-HHMMSS/regression_manifest.tsv`
+- `runs/regression-YYYYmmdd-HHMMSS/regression_summary.tsv`
+- `runs/regression-YYYYmmdd-HHMMSS/raw/`
+- `runs/regression-YYYYmmdd-HHMMSS/logs/`
+
 discovery semantics:
 - `discovery_manifest.tsv` answers `what exists in the mailbox and of what class?`
 - `run_manifest.tsv` answers `what raw bytes actually landed?`
+- `regression_summary.tsv` answers `did the historical case pass cleanly, what landed, what inline noise was filtered, and which gmail thread was actually opened?`
 - these are different questions and must not be collapsed
 
 run manifest semantics:
@@ -178,8 +243,16 @@ run portal-backed export:
 portal tsv format:
 
 ```tsv
-invitro	<gmail_message_id_or_locator>
+invitro	<gmail_message_id_or_locator>	<row_needle?>	<patient_last_name_hint?>
 ```
+
+if many portal rows use the same patient gate, pass the hint once for the whole run:
+
+```bash
+PORTAL_PATIENT_HINT='<last-name>' ./scripts/run_portal_lab_export.sh ./tmp/portal_targets.tsv ./tmp/portal-run
+```
+
+when the hint is not in the tsv or env and the script has a tty, it prompts once before processing rows. provider tabs are closed after each row so a batch run should not leave a stack of portal pages open.
 
 current portal support:
 - `invitro`
@@ -200,6 +273,9 @@ metadata layer:
   - `owner_source`
   - `owner_status` = `likely_owner|weak_owner|unknown_owner`
   - provider + confidence
+  - `status` = `ok|missing_raw|non_result|sidecar`
+- obvious non-result support attachments stay in `raw/`, are marked `non_result`, and are not promoted into `final/`
+- formal sidecars such as `.sig` stay in `raw/`, are marked `sidecar`, and are not promoted as clinical result files
 
 claims layer:
 - `claims_manifest.tsv` records:
@@ -231,8 +307,8 @@ password-protected pdf lane:
   - provider metadata such as `birthDate`
   - gmail thread text such as `password is your birth date DDMMYYYY`
   - explicit env hints:
-    - `PDF_BIRTH_DATE=1984-10-26`
-    - `PDF_PASSWORD_CANDIDATES=26101984,19841026`
+    - `PDF_BIRTH_DATE=1970-01-31`
+    - `PDF_PASSWORD_CANDIDATES=31011970,19700131`
 - manifests keep `password_source`, but redact the concrete password value
 - `pdf_text_manifest.tsv` status now distinguishes `missing_dependency` from real extraction failure
 
@@ -242,7 +318,7 @@ image-heavy targets:
 - `ocr_manifest.tsv` status now distinguishes `missing_dependency` from OCR runtime failure
 
 date policy:
-- every exported asset gets a date in `final/`
+- every promoted result asset gets a date in `final/`
 - source priority is:
   - provider result page
   - gmail thread / received date
@@ -255,6 +331,10 @@ portal boundary:
 - current support proves `gmail thread -> tokenized portal link -> provider pdf`
 - this is not yet a universal login robot for every lab cabinet
 - providers with username/password/2fa/captcha still need separate adapters
+
+release discipline:
+- use [docs/release_checklist.md](docs/release_checklist.md) before calling the project ready for public alpha
+- keep public examples sanitized and real mailbox regression corpora local under gitignored paths
 
 ## skill use
 
@@ -289,3 +369,7 @@ python3 "$HOME/.codex/skills/gmail-browser-attachments/scripts/ocr_image_assets.
 see [`examples/targets.tsv`](./examples/targets.tsv) for batch input format.
 see [`examples/portal_targets.tsv`](./examples/portal_targets.tsv) for portal-backed export targets.
 see [`examples/regression_targets.tsv`](./examples/regression_targets.tsv) for live regression inputs.
+
+## license
+
+MIT. See [`LICENSE`](LICENSE).

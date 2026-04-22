@@ -27,6 +27,7 @@ PORT="${PORT:-9222}"
 START_CHROME="${START_CHROME:-1}"
 WAIT_SECONDS="${WAIT_SECONDS:-30}"
 STOP_CHROME_ON_EXIT="${STOP_CHROME_ON_EXIT:-1}"
+LOCK_DIR="${TMPDIR:-/tmp}/gmail-lab-cdp-port-${PORT}.lock"
 
 RAW_DIR="$RUN_DIR/raw"
 OCR_DIR="$RUN_DIR/ocr"
@@ -47,8 +48,20 @@ cleanup() {
   if [[ "$STARTED_CLONE" == "1" && "$STOP_CHROME_ON_EXIT" == "1" && -n "$CHROME_PID" ]]; then
     kill "$CHROME_PID" >/dev/null 2>&1 || true
   fi
+  rm -rf "$LOCK_DIR"
 }
 
+acquire_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "$LOCK_DIR/pid"
+    return 0
+  fi
+  lock_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  echo "cdp lock is already held for port $PORT (pid=${lock_pid:-unknown}); do not run live gmail scripts in parallel" >&2
+  exit 1
+}
+
+acquire_lock
 trap cleanup EXIT INT TERM
 
 {
@@ -82,6 +95,38 @@ value = re.sub(r"\s+", "-", value)
 value = re.sub(r"[^a-z0-9а-яё_-]+", "-", value, flags=re.IGNORECASE)
 value = re.sub(r"-{2,}", "-", value).strip("-")
 print(value[:80] or "target")
+PY
+}
+
+browser_ws_url() {
+  python3 - <<'PY' "$PORT"
+import json
+import sys
+import urllib.request
+port = sys.argv[1]
+with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=3) as resp:
+    data = json.loads(resp.read().decode())
+print(data.get("webSocketDebuggerUrl", ""))
+PY
+}
+
+resolve_gmail_page_ws_url() {
+  python3 - <<'PY' "$PORT"
+import json
+import sys
+import time
+import urllib.request
+port = sys.argv[1]
+base = f"http://127.0.0.1:{port}"
+for _ in range(30):
+    with urllib.request.urlopen(base + "/json/list", timeout=3) as resp:
+        data = json.loads(resp.read().decode())
+    for item in data:
+        if item.get("type") == "page" and "mail.google.com" in item.get("url", "") and item.get("webSocketDebuggerUrl"):
+            print(item["webSocketDebuggerUrl"])
+            raise SystemExit(0)
+    time.sleep(0.5)
+raise SystemExit(1)
 PY
 }
 
@@ -193,8 +238,15 @@ if [[ "$(port_is_up)" != "up" ]]; then
   exit 1
 fi
 
-"$SKILL_DIR/scripts/gmail_smoke_check.sh" "$PORT" >"$SMOKE_LOG" 2>&1
-WS_URL="$("$SKILL_DIR/scripts/gmail_find_page_ws_url.sh" "$PORT")"
+BROWSER_WS_URL="$(browser_ws_url)"
+WS_URL="$("$SKILL_DIR/scripts/gmail_find_page_ws_url.sh" "$PORT" "" "https://mail.google.com/mail/u/0/#inbox")"
+if [[ -z "$WS_URL" && -n "$BROWSER_WS_URL" ]]; then
+  node "$SKILL_DIR/scripts/chrome_cdp_create_target.mjs" "$BROWSER_WS_URL" "https://mail.google.com/mail/u/0/#inbox" >/dev/null 2>&1 || true
+  WS_URL="$(resolve_gmail_page_ws_url || true)"
+fi
+if ! "$SKILL_DIR/scripts/gmail_smoke_check.sh" "$PORT" >"$SMOKE_LOG" 2>&1; then
+  echo "warning: smoke check failed, continuing with resolved gmail ws" >>"$SMOKE_LOG"
+fi
 if [[ -z "$WS_URL" ]]; then
   echo "failed to resolve gmail page websocket on port $PORT" >&2
   exit 1

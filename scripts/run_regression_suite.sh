@@ -23,13 +23,32 @@ print(Path(sys.argv[1]).expanduser().resolve())
 PY
 )"
 PORT="${PORT:-9222}"
+LOCK_DIR="${TMPDIR:-/tmp}/gmail-lab-cdp-port-${PORT}.lock"
 
 RAW_DIR="$RUN_DIR/raw"
 LOG_DIR="$RUN_DIR/logs"
 MANIFEST="$RUN_DIR/regression_manifest.tsv"
+SUMMARY="$RUN_DIR/regression_summary.tsv"
 SMOKE_LOG="$LOG_DIR/smoke_check.log"
 
 mkdir -p "$RAW_DIR" "$LOG_DIR"
+
+acquire_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    printf '%s\n' "$$" > "$LOCK_DIR/pid"
+    return 0
+  fi
+  lock_pid="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  echo "cdp lock is already held for port $PORT (pid=${lock_pid:-unknown}); do not run live gmail scripts in parallel" >&2
+  exit 1
+}
+
+release_lock() {
+  rm -rf "$LOCK_DIR"
+}
+
+acquire_lock
+trap release_lock EXIT INT TERM
 
 if [[ ! -f "$TARGETS_FILE" ]]; then
   echo "missing regression targets file: $TARGETS_FILE" >&2
@@ -113,5 +132,7 @@ PY
 
   echo -e "${line_no}\t${slug}\t${row_status}\t${min_attachments}\t${actual_attachments}\t${min_inline}\t${actual_inline}\t${query}\t${needle}\t${note}\t${json_log}\t${stderr_log}" >> "$MANIFEST"
 done < "$TARGETS_FILE"
+
+python3 "$REPO_ROOT/scripts/summarize_regression_run.py" "$RUN_DIR" "$SUMMARY" >/dev/null
 
 echo "$MANIFEST"

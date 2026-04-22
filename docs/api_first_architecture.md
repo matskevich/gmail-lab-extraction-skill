@@ -1,8 +1,10 @@
 # api-first architecture
 
-the long-term product should be `gmail api first` and `browser fallback second`.
+the long-term architecture should be `gmail api first` and `browser fallback second`.
 
-the local browser/cdp lane is useful for rescue and debugging, but it is the wrong primary architecture for a multi-tenant product.
+the product boundary is still self-hosted and local-first. `gmail api first` is about a more reliable extractor, not about turning this repo into a hosted mailbox service.
+
+the local browser/cdp lane is useful for rescue and debugging, but it is the wrong primary extractor even for a self-hosted tool once a stable gmail api lane exists.
 
 ## design principle
 

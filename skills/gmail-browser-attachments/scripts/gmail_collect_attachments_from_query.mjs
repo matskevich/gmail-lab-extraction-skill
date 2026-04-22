@@ -84,6 +84,30 @@ async function waitFor(session, checkExpression, timeoutMs = 15000, intervalMs =
   throw new Error(`timeout waiting for condition: ${checkExpression}`);
 }
 
+async function waitForSearchResultsRow(session, rowNeedle, timeoutMs = 20000) {
+  return await waitFor(
+    session,
+    `(() => {
+      const needle = ${JSON.stringify(rowNeedle)};
+      return Array.from(document.querySelectorAll('tr[role="row"]'))
+        .some(tr => (tr.innerText || '').includes(needle));
+    })()`,
+    timeoutMs,
+    500
+  );
+}
+
+async function waitForSearchQuery(session, timeoutMs = 20000) {
+  return await waitFor(
+    session,
+    `(() => {
+      return location.hash.startsWith('#search/') && /^Search results\\b/i.test(document.title || '');
+    })()`,
+    timeoutMs,
+    500
+  );
+}
+
 async function warmThreadForAssetHydration(session, maxPasses = 8, settleMs = 900) {
   let lastHeight = 0;
   let stablePasses = 0;
@@ -121,12 +145,37 @@ async function writeUniqueFile(filename, bytesBase64) {
   return { outPath, size: buffer.length };
 }
 
+function isGenericInlineFilename(filename) {
+  const lower = (filename || "").toLowerCase();
+  return (
+    lower.startsWith("gmail-inline-") ||
+    lower.startsWith("inline-asset") ||
+    lower.startsWith("adkq_")
+  );
+}
+
+function skipReasonForPayload(payload, { hasAttachmentAssets }) {
+  if (payload.kind !== "inline") return null;
+  if (payload.size <= 0) return "zero_byte_inline";
+
+  if (!hasAttachmentAssets) return null;
+
+  const genericInline = isGenericInlineFilename(payload.filename);
+  const lowerMime = (payload.mimeType || "").toLowerCase();
+  const isWebp = lowerMime.includes("image/webp") || (payload.filename || "").toLowerCase().endsWith(".webp");
+  const isSmall = payload.size < 150_000;
+
+  if (genericInline && isWebp) return "generic_webp_inline_with_attachments";
+  if (genericInline && isSmall) return "small_generic_inline_with_attachments";
+  return null;
+}
+
 try {
   const result = await withCDP(wsUrl, async (session) => {
     const searchUrl = `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}`;
     await session.evaluate(`location.href = ${JSON.stringify(searchUrl)}`);
-    await waitFor(session, `location.href.includes('#search/')`);
-    await waitFor(session, `document.body && document.body.innerText.includes(${JSON.stringify(rowNeedle)})`, 20000);
+    await waitForSearchQuery(session, 20000);
+    await waitForSearchResultsRow(session, rowNeedle, 20000);
 
     const clicked = await session.evaluate(`
       (() => {
@@ -140,7 +189,15 @@ try {
     `);
     if (!clicked) throw new Error(`row not found for needle: ${rowNeedle}`);
 
-    await waitFor(session, `document.body && document.body.innerText.includes(${JSON.stringify(rowNeedle)}) && !location.href.endsWith('#inbox')`, 20000);
+    await waitFor(
+      session,
+      `(() => {
+        const bodyText = document.body ? (document.body.innerText || '') : '';
+        return !/^Search results\\b/i.test(document.title || '') && bodyText.includes(${JSON.stringify(rowNeedle)});
+      })()`,
+      20000,
+      500
+    );
 
     // Expand all messages in the thread if Gmail exposes a control.
     await session.evaluate(`
@@ -248,56 +305,76 @@ try {
       );
     }
 
+    const hasAttachmentAssets = assets.some((asset) => asset.kind === "attachment");
     const saved = [];
+    const filterSummary = {};
+    const fetchErrorSummary = {};
     for (const att of assets) {
-      const payload = await session.evaluate(`
-        (async () => {
-          const url = ${JSON.stringify(att.url)};
-          const filename = ${JSON.stringify(att.filename)};
-          const kind = ${JSON.stringify(att.kind)};
-          const res = await fetch(url, { credentials: 'include' });
-          if (!res.ok) throw new Error('fetch failed: ' + res.status + ' for ' + filename);
-          const bytes = new Uint8Array(await res.arrayBuffer());
-          let binary = '';
-          const chunk = 0x8000;
-          for (let i = 0; i < bytes.length; i += chunk) {
-            binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-          }
-          const mimeType = res.headers.get('content-type') || 'application/octet-stream';
-          const ext = mimeType.includes('png') ? '.png' :
-            mimeType.includes('jpeg') ? '.jpg' :
-            mimeType.includes('webp') ? '.webp' :
-            mimeType.includes('gif') ? '.gif' :
-            mimeType.includes('tiff') ? '.tif' : '';
-          const urlObj = (() => {
-            try { return new URL(url); } catch { return null; }
-          })();
-          const lastPath = urlObj ? (urlObj.pathname.split('/').filter(Boolean).pop() || '') : '';
-          const attId = urlObj ? (urlObj.searchParams.get('attid') || '') : '';
-          const hasExtension = (value) => /\\.[A-Za-z0-9]{2,5}$/.test((value || '').trim());
-          const isGenericStem = (value) => !value || /^\\d+$/.test(value) || /^image$/i.test(value);
-          let resolvedFilename = (filename || '').trim();
-          if (!resolvedFilename) {
-            if (!isGenericStem(lastPath)) {
-              resolvedFilename = lastPath;
-            } else if (kind === 'inline' && attId) {
-              resolvedFilename = 'gmail-inline-' + attId;
-            } else {
-              resolvedFilename = kind === 'inline' ? 'inline-asset' : 'attachment';
+      let payload;
+      try {
+        payload = await session.evaluate(`
+          (async () => {
+            const url = ${JSON.stringify(att.url)};
+            const filename = ${JSON.stringify(att.filename)};
+            const kind = ${JSON.stringify(att.kind)};
+            const res = await fetch(url, { credentials: 'include' });
+            if (!res.ok) throw new Error('fetch failed: ' + res.status + ' for ' + filename);
+            const bytes = new Uint8Array(await res.arrayBuffer());
+            let binary = '';
+            const chunk = 0x8000;
+            for (let i = 0; i < bytes.length; i += chunk) {
+              binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
             }
-          }
-          if (!hasExtension(resolvedFilename) && ext) {
-            resolvedFilename += ext;
-          }
-          return {
-            kind,
-            filename: resolvedFilename,
-            mimeType,
-            base64: btoa(binary),
-            size: bytes.length,
-          };
-        })()
-      `);
+            const mimeType = res.headers.get('content-type') || 'application/octet-stream';
+            const ext = mimeType.includes('png') ? '.png' :
+              mimeType.includes('jpeg') ? '.jpg' :
+              mimeType.includes('webp') ? '.webp' :
+              mimeType.includes('gif') ? '.gif' :
+              mimeType.includes('tiff') ? '.tif' : '';
+            const urlObj = (() => {
+              try { return new URL(url); } catch { return null; }
+            })();
+            const lastPath = urlObj ? (urlObj.pathname.split('/').filter(Boolean).pop() || '') : '';
+            const attId = urlObj ? (urlObj.searchParams.get('attid') || '') : '';
+            const hasExtension = (value) => /\\.[A-Za-z0-9]{2,5}$/.test((value || '').trim());
+            const isGenericStem = (value) => !value || /^\\d+$/.test(value) || /^image$/i.test(value);
+            let resolvedFilename = (filename || '').trim();
+            if (!resolvedFilename) {
+              if (!isGenericStem(lastPath)) {
+                resolvedFilename = lastPath;
+              } else if (kind === 'inline' && attId) {
+                resolvedFilename = 'gmail-inline-' + attId;
+              } else {
+                resolvedFilename = kind === 'inline' ? 'inline-asset' : 'attachment';
+              }
+            }
+            if (!hasExtension(resolvedFilename) && ext) {
+              resolvedFilename += ext;
+            }
+            return {
+              kind,
+              filename: resolvedFilename,
+              mimeType,
+              base64: btoa(binary),
+              size: bytes.length,
+            };
+          })()
+        `);
+      } catch (err) {
+        const key = `${att.kind}_fetch_error`;
+        fetchErrorSummary[key] = (fetchErrorSummary[key] || 0) + 1;
+        continue;
+      }
+      if (!payload?.base64 || !payload.filename) {
+        const key = `${att.kind}_invalid_payload`;
+        fetchErrorSummary[key] = (fetchErrorSummary[key] || 0) + 1;
+        continue;
+      }
+      const skipReason = skipReasonForPayload(payload, { hasAttachmentAssets });
+      if (skipReason) {
+        filterSummary[skipReason] = (filterSummary[skipReason] || 0) + 1;
+        continue;
+      }
       const written = await writeUniqueFile(payload.filename, payload.base64);
       saved.push({ kind: payload.kind, filename: payload.filename, size: payload.size, saved_to: written.outPath });
     }
@@ -307,7 +384,7 @@ try {
       return acc;
     }, {});
 
-    return { query, rowNeedle, thread, diagnostics, savedCounts, saved };
+    return { query, rowNeedle, thread, diagnostics, savedCounts, filterSummary, fetchErrorSummary, saved };
   });
   console.log(JSON.stringify(result, null, 2));
 } catch (err) {

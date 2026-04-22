@@ -165,9 +165,9 @@ def test_derive_claims_and_emit_manifests(tmp_path) -> None:
         "\n".join(
             [
                 "identity:",
-                "  canonical_name: \"Мацкевич Дмитрий Анатольевич\"",
+                "  canonical_name: \"Иванов Иван Иванович\"",
                 "  aliases:",
-                "    - \"Dzmitry Matskevich\"",
+                "    - \"Ivan Ivanov\"",
             ]
         ),
         encoding="utf-8",
@@ -177,7 +177,7 @@ def test_derive_claims_and_emit_manifests(tmp_path) -> None:
         tmp_path / "report.txt",
         "\n".join(
             [
-                "Пациент: Мацкевич Дмитрий Анатольевич",
+                "Пациент: Иванов Иван Иванович",
                 "Дата взятия биоматериала: 05.02.2021",
                 "Дата готовности результата: 06.02.2021",
                 "Свободный тестостерон: 19.83",

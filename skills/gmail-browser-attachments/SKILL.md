@@ -107,8 +107,8 @@ brew install tesseract poppler
 
 8. if a PDF is password-protected, pass hints to the repo runner or the text extractor:
 ```bash
-PDF_BIRTH_DATE=1984-10-26 \
-PDF_PASSWORD_CANDIDATES=26101984 \
+PDF_BIRTH_DATE=1970-01-31 \
+PDF_PASSWORD_CANDIDATES=31011970 \
 python3 ./scripts/extract_pdf_text.py ./downloads ./pdf_text
 ```
 

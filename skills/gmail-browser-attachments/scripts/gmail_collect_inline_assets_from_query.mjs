@@ -49,6 +49,30 @@ async function waitFor(session, checkExpression, timeoutMs = 15000, intervalMs =
   throw new Error(`timeout waiting for condition: ${checkExpression}`);
 }
 
+async function waitForSearchResultsRow(session, rowNeedle, timeoutMs = 20000) {
+  return await waitFor(
+    session,
+    `(() => {
+      const needle = ${JSON.stringify(rowNeedle)};
+      return Array.from(document.querySelectorAll('tr[role="row"]'))
+        .some(tr => (tr.innerText || '').includes(needle));
+    })()`,
+    timeoutMs,
+    500
+  );
+}
+
+async function waitForSearchQuery(session, timeoutMs = 20000) {
+  return await waitFor(
+    session,
+    `(() => {
+      return location.hash.startsWith('#search/') && /^Search results\\b/i.test(document.title || '');
+    })()`,
+    timeoutMs,
+    500
+  );
+}
+
 async function exists(p) {
   try {
     await fs.stat(p);
@@ -86,7 +110,8 @@ try {
   const result = await withCDP(wsUrl, async (session) => {
     const searchUrl = `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}`;
     await session.evaluate(`location.href = ${JSON.stringify(searchUrl)}`);
-    await waitFor(session, `document.body && document.body.innerText.includes(${JSON.stringify(rowNeedle)})`, 20000);
+    await waitForSearchQuery(session, 20000);
+    await waitForSearchResultsRow(session, rowNeedle, 20000);
     const clicked = await session.evaluate(`
       (() => {
         const row = Array.from(document.querySelectorAll('tr[role="row"]'))
@@ -97,7 +122,15 @@ try {
       })()
     `);
     if (!clicked) throw new Error(`row not found for needle: ${rowNeedle}`);
-    await waitFor(session, `!location.href.endsWith('#inbox')`, 20000);
+    await waitFor(
+      session,
+      `(() => {
+        const bodyText = document.body ? (document.body.innerText || '') : '';
+        return !/^Search results\\b/i.test(document.title || '') && bodyText.includes(${JSON.stringify(rowNeedle)});
+      })()`,
+      20000,
+      500
+    );
     await new Promise((r) => setTimeout(r, 1500));
 
     const thread = await session.evaluate(gmailThreadContextExpression());
@@ -124,6 +157,7 @@ try {
     if (!inlineAssets.length) throw new Error(`no inline assets found for row: ${rowNeedle}`);
 
     const saved = [];
+    const filterSummary = {};
     for (const asset of inlineAssets) {
       const payload = await session.evaluate(`
         (async () => {
@@ -165,10 +199,14 @@ try {
           };
         })()
       `);
+      if (payload.size <= 0) {
+        filterSummary.zero_byte_inline = (filterSummary.zero_byte_inline || 0) + 1;
+        continue;
+      }
       const written = await writeUniqueFile(payload.filename, payload.base64);
       saved.push({ filename: payload.filename, size: payload.size, saved_to: written.outPath });
     }
-    return { query, rowNeedle, thread, saved };
+    return { query, rowNeedle, thread, filterSummary, saved };
   });
   console.log(JSON.stringify(result, null, 2));
 } catch (err) {

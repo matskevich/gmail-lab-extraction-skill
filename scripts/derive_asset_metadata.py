@@ -39,6 +39,10 @@ def slugify(value: str) -> str:
     return text or "unknown"
 
 
+def tsv_cell(value: object) -> str:
+    return re.sub(r"[\t\r\n]+", " ", str(value)).strip()
+
+
 def parse_english_date(text: str) -> list[str]:
     out = []
     for m in re.finditer(r"(?P<mon>Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(?P<day>\d{1,2}),\s+(?P<year>\d{4})", text, re.I):
@@ -150,6 +154,8 @@ def extract_owner_candidates(text: str) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
     for m in re.finditer(r"Client:\s*([^\n]+)", text, re.I):
         out.append((m.group(1).strip(), "provider_client"))
+    for m in re.finditer(r"Patient Name\s*:?\s*([^\n|]+?)(?:\s+Mobile Phone\b|$|\|)", text, re.I):
+        out.append((m.group(1).strip(), "provider_client"))
     for m in re.finditer(r"Уважаемый\s+([А-ЯЁA-Z][^\n!,]{3,80})", text):
         out.append((m.group(1).strip(), "thread_salutation"))
     for m in re.finditer(r"для\s+([А-ЯЁA-Z][А-ЯЁA-Z\s.,-]{3,80})\s+по заявке", text, re.I):
@@ -160,6 +166,11 @@ def extract_owner_candidates(text: str) -> list[tuple[str, str]]:
         out.append((f"{m.group(1)} {m.group(2)}".strip(), "filename_or_text_name"))
     for m in re.finditer(r"_([A-Za-zА-Яа-яЁё-]{3,})\.(?:pdf|jpg|jpeg|png)\b", text, re.I):
         out.append((m.group(1).strip(), "filename_name"))
+    for m in re.finditer(
+        r"([А-ЯЁ][А-ЯЁа-яё-]+(?:\s+[А-ЯЁ][А-ЯЁа-яё-]+){1,2})(?=[\s._-]*(?:\d{7,}|\.pdf|$))",
+        text,
+    ):
+        out.append((m.group(1).strip(), "filename_name"))
     return out
 
 
@@ -167,8 +178,15 @@ def choose_owner(*texts: str) -> tuple[str, str]:
     seen = []
     for text in texts:
         seen.extend(extract_owner_candidates(decode_text(text or "")))
+    source_priority = {
+        "provider_client": 0,
+        "thread_salutation": 1,
+        "thread_title": 2,
+        "filename_or_text_name": 3,
+        "filename_name": 4,
+    }
     if seen:
-        return seen[0]
+        return sorted(seen, key=lambda item: source_priority.get(item[1], 99))[0]
     return "unknown-owner", "none"
 
 
@@ -197,6 +215,24 @@ def overall_confidence(date_status: str, owner_status_value: str, provider: str)
     if date_status == "inferred" and provider_known:
         return "medium"
     return "low"
+
+
+def is_non_result_asset(filename: str) -> bool:
+    decoded = decode_text(filename or "").lower()
+    non_result_patterns = [
+        r"\bпамятк",
+        r"\binstruction\b",
+        r"\bmemo\b",
+        r"\bpromo\b",
+        r"\badvert",
+        r"\bnewsletter\b",
+    ]
+    return any(re.search(pattern, decoded, re.I) for pattern in non_result_patterns)
+
+
+def is_sidecar_asset(filename: str) -> bool:
+    decoded = decode_text(filename or "").lower()
+    return decoded.endswith(".sig")
 
 
 def choose_analysis_date(
@@ -239,6 +275,8 @@ def choose_analysis_date(
         "дата анализа",
         "report date",
         "reg no / date",
+        "reg no./date",
+        "reg no./ date",
         "tanggal",
     )
     for text in artifact_texts:
@@ -347,11 +385,11 @@ def main() -> int:
             str(thread_json.get("title", "")),
             str(thread_json.get("bodySnippet", "")),
             str(thread_json.get("href", "")),
+            "\n".join(str(v) for v in (provider_json.get("meta", {}) or {}).values()),
+            "\n".join(pdf_texts),
+            "\n".join(ocr_texts),
             "\n".join(str(item.get("filename", "")) for item in saved_items),
             "\n".join(str(item.get("saved_to", "")) for item in saved_items),
-            "\n".join(str(v) for v in (provider_json.get("meta", {}) or {}).values()),
-            "\n".join(ocr_texts),
-            "\n".join(pdf_texts),
         )
 
         for item in saved_items:
@@ -363,15 +401,39 @@ def main() -> int:
             date_status = analysis_date_status(date_source)
             owner_status_value = owner_status(owner_source)
             confidence = overall_confidence(date_status, owner_status_value, provider)
-            canonical_name = f"{analysis_date}__{slugify(provider)}__{slugify(owner_name)}__{raw_path.name}"
-            final_path = final_dir / canonical_name
-            if raw_path.exists():
-                link_or_copy(raw_path, final_path)
-                status = "ok"
+            if is_sidecar_asset(raw_name):
+                final_path = Path("-")
+                status = "sidecar"
+            elif is_non_result_asset(raw_name):
+                final_path = Path("-")
+                status = "non_result"
             else:
-                status = "missing_raw"
+                canonical_name = f"{analysis_date}__{slugify(provider)}__{slugify(owner_name)}__{raw_path.name}"
+                final_path = final_dir / canonical_name
+                if raw_path.exists():
+                    link_or_copy(raw_path, final_path)
+                    status = "ok"
+                else:
+                    status = "missing_raw"
             out_lines.append(
-                f"{raw_path}\t{final_path}\t{analysis_date}\t{date_source}\t{date_status}\t{owner_name}\t{owner_source}\t{owner_status_value}\t{provider}\t{provider_source}\t{confidence}\t{status}\n"
+                "\t".join(
+                    tsv_cell(value)
+                    for value in (
+                        raw_path,
+                        final_path,
+                        analysis_date,
+                        date_source,
+                        date_status,
+                        owner_name,
+                        owner_source,
+                        owner_status_value,
+                        provider,
+                        provider_source,
+                        confidence,
+                        status,
+                    )
+                )
+                + "\n"
             )
 
     asset_manifest_path.write_text("".join(out_lines), encoding="utf-8")

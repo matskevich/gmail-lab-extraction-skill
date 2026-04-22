@@ -12,6 +12,7 @@
 8. guarantee an `analysis_date` for every artifact
 9. capture whose result it is
 10. package the work as a reusable skill/repo for other agents
+11. make the repo usable as an agent-first self-hosted open-source toolkit for operators exporting their own gmail lab history
 
 ## current status
 
@@ -22,11 +23,15 @@
 - OCR for image assets
 - password-hinted PDF text extraction with OCR fallback
 - reproducible runs with `run_manifest.tsv`
+- regression review condensed into `regression_summary.tsv`
 - explicit separation between acquisition status and enrichment status
 - metadata derivation for `analysis_date`
 - metadata derivation for `owner`
+- non-result support attachments can stay in `raw/` without promotion to `final/`
 - canonical filenames in `final/`
 - reusable repo + skill structure
+- self-hosted local-first product boundary is now explicit in docs
+- primary user is now explicitly another ai agent
 
 ### yellow
 - discovery still depends on maintaining a regression corpus of real historical mails
@@ -50,7 +55,8 @@
 1. add one more provider adapter beyond invitro anonymous links
 2. add provider-specific direct date parsers where the portal page exposes collection/result dates
 3. improve stronger owner verification beyond thread/title heuristics
-4. add a first-class discovery manifest instead of keeping discovery only in prose + regression targets
+4. expand the live regression corpus beyond the current smoke set so mixed, portal-only, and inline-only cases stay covered
+5. reduce first-run setup friction for a new self-hosted agent/operator pair
 
 ## what should wait until v2
 
@@ -63,8 +69,14 @@
 for agent use now:
 - yes, as a gmail extraction repo with OCR + metadata derivation
 
+for self-hosted operator use now:
+- yes, with browser/cdp setup and honest expectations about provider/login limits
+
+for other ai agents now:
+- yes, if they follow the manifest-first contract and stay within the current browser-first live boundary
+
 for claiming universal lab export:
 - no
 
 truthful label right now:
-- `gmail and tokenized-portal lab extraction repo with explicit provenance and metadata status`
+- `agent-first self-hosted gmail lab export repo with explicit provenance and metadata status`

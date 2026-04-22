@@ -21,6 +21,30 @@ async function waitFor(session, expression, timeoutMs = 25000, intervalMs = 500)
   throw new Error(`timeout waiting for condition: ${expression}`);
 }
 
+async function waitForSearchResultsRow(session, rowNeedle, timeoutMs = 25000) {
+  return await waitFor(
+    session,
+    `(() => {
+      const needle = ${JSON.stringify(rowNeedle)};
+      return Array.from(document.querySelectorAll('tr[role="row"]'))
+        .some(tr => (tr.innerText || '').includes(needle));
+    })()`,
+    timeoutMs,
+    500
+  );
+}
+
+async function waitForSearchQuery(session, timeoutMs = 25000) {
+  return await waitFor(
+    session,
+    `(() => {
+      return location.hash.startsWith('#search/') && /^Search results\\b/i.test(document.title || '');
+    })()`,
+    timeoutMs,
+    500
+  );
+}
+
 function locatorToUrl(value) {
   if (/^https:\/\/mail\.google\.com\//.test(value)) return value;
   if (/^[0-9a-f]{16,}$/i.test(value)) return `https://mail.google.com/mail/u/0/#all/${value}`;
@@ -37,8 +61,8 @@ try {
       if (!rowNeedle) throw new Error("rowNeedle is required for query locator");
       const searchUrl = `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(locator)}`;
       await session.evaluate(`location.href = ${JSON.stringify(searchUrl)}`);
-      await waitFor(session, `location.href.includes('#search/')`, 10000);
-      await waitFor(session, `document.body && document.body.innerText.includes(${JSON.stringify(rowNeedle)})`, 25000);
+      await waitForSearchQuery(session, 25000);
+      await waitForSearchResultsRow(session, rowNeedle, 25000);
       const clicked = await session.evaluate(`
         (() => {
           const needle = ${JSON.stringify(rowNeedle)};
@@ -50,7 +74,15 @@ try {
         })()
       `);
       if (!clicked) throw new Error(`row not found for needle: ${rowNeedle}`);
-      await waitFor(session, `document.title.length > 0 && !document.title.startsWith('Search results')`, 30000);
+      await waitFor(
+        session,
+        `(() => {
+          const bodyText = document.body ? (document.body.innerText || '') : '';
+          return !/^Search results\\b/i.test(document.title || '') && bodyText.includes(${JSON.stringify(rowNeedle)});
+        })()`,
+        30000,
+        500
+      );
     }
 
     await session.evaluate(`
