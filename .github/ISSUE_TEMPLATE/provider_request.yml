@@ -1,0 +1,70 @@
+name: provider or lab request
+description: request support for a lab/provider, portal, language, or delivery shape
+title: "[provider]: "
+labels: ["provider-request", "needs-repro"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        describe the delivery shape. do not attach real results or portal links.
+  - type: input
+    id: country
+    attributes:
+      label: country
+      placeholder: "country or region"
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: provider/lab name
+      placeholder: "lab/provider name"
+    validations:
+      required: true
+  - type: dropdown
+    id: delivery_shape
+    attributes:
+      label: delivery shape
+      multiple: true
+      options:
+        - gmail pdf attachment
+        - gmail image attachment
+        - inline image in email body
+        - tokenized portal link
+        - login portal
+        - passworded pdf
+        - unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: gate
+    attributes:
+      label: gate or hint needed
+      multiple: true
+      options:
+        - none known
+        - patient last name
+        - date of birth
+        - explicit password in email
+        - username/password login
+        - 2fa/captcha
+        - expired link
+        - unknown
+  - type: textarea
+    id: current_status
+    attributes:
+      label: current tool result
+      description: paste redacted status values from discovery/run/asset manifests
+      render: text
+  - type: textarea
+    id: sample_structure
+    attributes:
+      label: safe structure description
+      description: describe subject/sender/file extension/page language without private values
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: privacy checklist
+      options:
+        - label: i did not include raw medical files, portal keys, names, birth dates, emails, or order ids
+          required: true

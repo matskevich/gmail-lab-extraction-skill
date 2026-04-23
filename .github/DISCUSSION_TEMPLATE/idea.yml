@@ -1,0 +1,15 @@
+title: "[idea]: "
+labels: ["idea"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: idea
+      description: what should become easier or more powerful?
+    validations:
+      required: true
+  - type: textarea
+    id: mechanism
+    attributes:
+      label: mechanism
+      description: how might it work in manifests, commands, adapters, or docs?

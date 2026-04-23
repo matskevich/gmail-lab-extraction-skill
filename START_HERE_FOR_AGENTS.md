@@ -29,7 +29,12 @@ read this file first.
 7. `docs/test_strategy.md`
 8. `docs/release_checklist.md`
 9. `docs/release_verdict.md`
-10. `schemas/*.schema.json`
+10. `PRIVACY.md`
+11. `CONTRIBUTING.md`
+12. `SUPPORT.md`
+13. `ROADMAP.md`
+14. `docs/community_intake.md`
+15. `schemas/*.schema.json`
 
 ## canonical truths
 
@@ -100,3 +105,11 @@ historical cmd threads can still regress into inline-only extraction when gmail 
 - public examples stay sanitized
 - real mailbox regression targets stay in a gitignored local file such as `tmp/private_regression_targets.tsv`
 - before claiming public-alpha readiness, run [docs/release_checklist.md](docs/release_checklist.md)
+
+## community intake rule
+
+- issues are actionable work
+- discussions are open-ended questions, ideas, and success/failure patterns
+- never ask users to upload raw medical files, portal keys, cookies, tokens, or unredacted manifests
+- map every issue to one lane: discovery, acquisition, enrichment, metadata, promotion, portal adapter, or docs/onboarding
+- use `docs/community_intake.md` as the label and triage contract

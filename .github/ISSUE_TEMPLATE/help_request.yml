@@ -1,0 +1,45 @@
+name: help request
+description: setup or run confusion
+title: "[help]: "
+labels: ["docs", "needs-repro"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: what are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: command and output
+      description: redact private paths and values
+      render: shell
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: area
+      options:
+        - install
+        - chrome/cdp
+        - gmail search
+        - export
+        - portal
+        - passworded pdf
+        - manifests
+        - other
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: os
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: privacy checklist
+      options:
+        - label: i removed personal medical data and credentials
+          required: true

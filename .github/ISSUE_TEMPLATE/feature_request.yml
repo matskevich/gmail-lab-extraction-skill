@@ -1,0 +1,38 @@
+name: feature request
+description: propose a workflow or product improvement
+title: "[feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: problem
+      description: what pain does this remove?
+    validations:
+      required: true
+  - type: textarea
+    id: desired_output
+    attributes:
+      label: desired output
+      description: what file, manifest field, status, command, or behavior should exist?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: area
+      options:
+        - discovery
+        - acquisition
+        - enrichment
+        - metadata
+        - promotion
+        - portal
+        - agent workflow
+        - docs
+        - other
+  - type: textarea
+    id: constraints
+    attributes:
+      label: constraints or risks
+      description: privacy, safety, provider gates, or backwards compatibility

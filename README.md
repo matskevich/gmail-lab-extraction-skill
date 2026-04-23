@@ -336,6 +336,21 @@ release discipline:
 - use [docs/release_checklist.md](docs/release_checklist.md) before calling the project ready for public alpha
 - keep public examples sanitized and real mailbox regression corpora local under gitignored paths
 
+## feedback and contribution
+
+github is the durable intake:
+
+- bugs: [open a bug report](https://github.com/matskevich/gmail-lab-extraction-skill/issues/new?template=bug_report.yml)
+- lab/provider support: [open a provider request](https://github.com/matskevich/gmail-lab-extraction-skill/issues/new?template=provider_request.yml)
+- setup help: [open a help request](https://github.com/matskevich/gmail-lab-extraction-skill/issues/new?template=help_request.yml)
+- ideas and questions: [start a discussion](https://github.com/matskevich/gmail-lab-extraction-skill/discussions)
+
+privacy rule:
+- do not upload real lab files, screenshots with personal data, portal links, cookies, tokens, or unredacted manifests
+- read [PRIVACY.md](PRIVACY.md) before opening an issue
+- read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR
+- use [docs/community_intake.md](docs/community_intake.md) for label and triage rules
+
 ## skill use
 
 ```bash

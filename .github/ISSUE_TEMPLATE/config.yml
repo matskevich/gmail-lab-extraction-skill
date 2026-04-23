@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: questions and ideas
+    url: https://github.com/matskevich/gmail-lab-extraction-skill/discussions
+    about: use discussions for open-ended questions, design ideas, and community wisdom
+  - name: privacy and security
+    url: https://github.com/matskevich/gmail-lab-extraction-skill/security/advisories/new
+    about: report credential, privacy, or medical-data exposure privately

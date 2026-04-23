@@ -1,0 +1,15 @@
+title: "[question]: "
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: question
+      description: ask without sharing private medical data
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: context
+      description: optional redacted context

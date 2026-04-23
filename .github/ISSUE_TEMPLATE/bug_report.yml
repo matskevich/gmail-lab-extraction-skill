@@ -1,0 +1,62 @@
+name: bug report
+description: a command failed, opened the wrong thread, missed assets, or wrote misleading manifests
+title: "[bug]: "
+labels: ["bug", "needs-repro"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        do not attach real lab files, screenshots with personal data, portal keys, cookies, tokens, or unredacted manifests.
+  - type: dropdown
+    id: lane
+    attributes:
+      label: lane
+      options:
+        - discovery
+        - acquisition
+        - enrichment
+        - metadata
+        - promotion
+        - portal adapter
+        - docs/onboarding
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: command
+      description: paste the command you ran, with private paths and values redacted
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: actual result
+      description: include redacted status values, not raw medical content
+    validations:
+      required: true
+  - type: textarea
+    id: manifest
+    attributes:
+      label: redacted manifest row or stderr
+      description: keep columns/statuses; replace names, dates of birth, emails, order ids, portal keys, and local paths
+      render: text
+  - type: input
+    id: os
+    attributes:
+      label: os
+      placeholder: "macOS 15, Ubuntu 24.04, ..."
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: privacy checklist
+      options:
+        - label: i removed personal medical data, names, birth dates, order ids, emails, portal keys, cookies, and tokens
+          required: true

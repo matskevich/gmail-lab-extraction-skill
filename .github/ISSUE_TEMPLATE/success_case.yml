@@ -1,0 +1,45 @@
+name: success case
+description: report a provider/language/file type that worked
+title: "[success]: "
+labels: ["success-case"]
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: provider/lab
+      placeholder: "optional if private"
+  - type: input
+    id: country_language
+    attributes:
+      label: country/language
+  - type: dropdown
+    id: delivery_shape
+    attributes:
+      label: delivery shape
+      multiple: true
+      options:
+        - gmail pdf attachment
+        - gmail image attachment
+        - inline image in email body
+        - tokenized portal link
+        - passworded pdf
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: statuses
+    attributes:
+      label: redacted statuses
+      description: paste only status summaries, not private artifacts
+      render: text
+  - type: textarea
+    id: notes
+    attributes:
+      label: what should become a regression case?
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: privacy checklist
+      options:
+        - label: i did not include raw medical files, portal keys, names, birth dates, emails, or order ids
+          required: true

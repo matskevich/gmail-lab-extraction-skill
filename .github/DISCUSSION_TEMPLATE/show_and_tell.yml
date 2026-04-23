@@ -1,0 +1,15 @@
+title: "[case]: "
+labels: ["success-case"]
+body:
+  - type: textarea
+    id: case
+    attributes:
+      label: case
+      description: share a redacted success/failure pattern that may help the project learn
+    validations:
+      required: true
+  - type: textarea
+    id: no_private_data
+    attributes:
+      label: privacy note
+      description: confirm that no private medical data or credentials are included
