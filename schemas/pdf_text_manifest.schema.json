@@ -6,10 +6,12 @@
     { "name": "source_file", "type": "absolute_path", "required": true },
     { "name": "text_txt", "type": "absolute_path_or_empty", "required": true },
     { "name": "method", "type": "string", "required": true, "enum": ["", "pdftotext", "pdftotext_password", "pdf_ocr", "pdf_ocr_password"] },
-    { "name": "password_source", "type": "string", "required": true, "enum": ["", "none", "env_password_candidates", "env_birth_date", "provider_birth_date", "thread_explicit_password", "thread_birth_date_hint"] },
+    { "name": "password_source", "type": "string", "required": true, "enum": ["", "none", "env_password_candidates", "env_birth_date", "prompt_password_candidates", "prompt_birth_date", "session_cache", "keychain", "encrypted_file", "thread_explicit_password"] },
     { "name": "password_used", "type": "string", "required": true },
+    { "name": "secret_scope", "type": "string", "required": true, "enum": ["", "attachment_sha256", "gmail_thread", "provider_identity", "identity"] },
+    { "name": "secret_persistence", "type": "string", "required": true, "enum": ["none", "never", "session", "keychain", "encrypted-file", "env", "message"] },
     { "name": "candidate_count", "type": "integer", "required": true },
-    { "name": "status", "type": "string", "required": true, "enum": ["ok_text", "ok_ocr", "missing_dependency", "fail"] },
+    { "name": "status", "type": "string", "required": true, "enum": ["ok_text", "ok_ocr", "missing_dependency", "needs_password_hint", "fail"] },
     { "name": "notes", "type": "string", "required": true }
   ]
 }

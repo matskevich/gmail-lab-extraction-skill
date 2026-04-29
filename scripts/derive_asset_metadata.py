@@ -407,6 +407,9 @@ def main() -> int:
             elif is_non_result_asset(raw_name):
                 final_path = Path("-")
                 status = "non_result"
+            elif date_status == "fallback":
+                final_path = Path("-")
+                status = "needs_review"
             else:
                 canonical_name = f"{analysis_date}__{slugify(provider)}__{slugify(owner_name)}__{raw_path.name}"
                 final_path = final_dir / canonical_name

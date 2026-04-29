@@ -285,3 +285,28 @@ def test_derive_claims_and_emit_manifests(tmp_path) -> None:
     assert len(analysis_rows) == 1
     assert analysis_rows[0]["provider"] == "cmd"
     assert analysis_rows[0]["status"] == "active"
+
+
+def test_identity_status_redacts_plaintext_birth_date(tmp_path) -> None:
+    root = tmp_path / ".gmail-lab"
+    runner = CliRunner()
+    config_path = root / "config.yaml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        "\n".join(
+            [
+                "identity:",
+                "  canonical_name: \"Example Patient\"",
+                "  birth_date: \"1970-01-31\"",
+                "  birth_date_secret_id: \"identity:default\"",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(main, ["--root", str(root), "identity-status"])
+
+    assert result.exit_code == 0, result.output
+    assert "1970-01-31" not in result.output
+    assert '"birth_date": "redacted"' in result.output
+    assert '"birth_date_secret_id": "identity:default"' in result.output

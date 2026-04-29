@@ -16,6 +16,8 @@ this means:
 - improve universal gmail discovery so a user can ask for likely lab/result history without writing provider-specific targets
 - add redacted fixture patterns for more languages and providers
 - harden metadata extraction for owner, analysis date, sample draw date, and provider
+- keep low-confidence metadata from looking promoted: fallback-dated assets must stay in `raw/` with `needs_review`
+- add a local secret-resolution layer for passworded PDFs: hint detection, interactive prompt, scoped keychain/session persistence, and `needs_password_hint` status
 - add provider adapters only when they preserve clear separation from gmail-native collection
 - make `coverage_debt.tsv` first-class for unsupported portals, passwords, and low-confidence metadata
 

@@ -77,13 +77,33 @@ must not do:
 responsibility:
 - extract text from PDFs after raw bytes land locally
 - try plain text extraction first
-- if needed, derive password candidates from thread/provider context or env hints
+- if needed, ask `gmail_lab/core/secrets/SecretResolver` for password candidates from local runtime secrets
 - fall back to rendering pages + OCR when the PDF is scanned
 - classify absent `pdftotext` / `pdftoppm` / `tesseract` as enrichment debt
 
 must not do:
 - store concrete passwords in manifests
 - assume every encrypted PDF is solvable without hints
+- treat provider/email hints as secret values
+
+### secret resolution
+- `gmail_lab/core/secrets/models.py`
+- `gmail_lab/core/secrets/store.py`
+- `gmail_lab/core/secrets/resolver.py`
+
+responsibility:
+- keep password hints separate from password values
+- resolve local candidates from env, prompt, session cache, OS keychain, encrypted local fallback, and explicit email passwords
+- support scopes:
+  - `attachment_sha256`
+  - `gmail_thread`
+  - `provider_identity`
+  - `identity`
+- emit only redacted outcome metadata into manifests
+
+must not do:
+- write raw passwords or dates of birth into repo files, target TSVs, logs, issue templates, or manifests
+- use plaintext `config.yaml` as the long-term secret store
 
 ### metadata derivation
 - `scripts/derive_asset_metadata.py`
@@ -155,6 +175,7 @@ existing run recovery:
 - truth for date / owner / provider / confidence
 - `status=non_result` means the raw file was preserved but intentionally not promoted into `final/`
 - `status=sidecar` means a formal companion file, such as `.sig`, was preserved in `raw/` but not promoted as a clinical result file
+- `status=needs_review` means acquisition landed the raw file but metadata is too weak for promotion; the current trigger is `analysis_date_status=fallback`
 
 ## design choices for agent-friendliness
 

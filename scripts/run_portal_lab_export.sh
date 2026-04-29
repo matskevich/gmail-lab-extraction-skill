@@ -158,12 +158,21 @@ statuses = {row.get("status", "") for row in rows}
 ok_statuses = {"ok_text", "ok_ocr"}
 if statuses and statuses <= ok_statuses:
     print("ok")
+elif "needs_password_hint" in statuses and statuses <= (ok_statuses | {"needs_password_hint"}):
+    print("partial" if statuses & ok_statuses else "needs_password_hint")
 elif "missing_dependency" in statuses and statuses <= (ok_statuses | {"missing_dependency"}):
     print("partial" if statuses & ok_statuses else "missing_dependency")
 elif "fail" in statuses and statuses <= (ok_statuses | {"fail"}):
     print("partial" if statuses & ok_statuses else "fail")
-elif "missing_dependency" in statuses or "fail" in statuses:
-    print("partial" if statuses & ok_statuses else ("missing_dependency" if "missing_dependency" in statuses and "fail" not in statuses else "fail"))
+elif "needs_password_hint" in statuses or "missing_dependency" in statuses or "fail" in statuses:
+    if statuses & ok_statuses:
+        print("partial")
+    elif "fail" in statuses:
+        print("fail")
+    elif "needs_password_hint" in statuses:
+        print("needs_password_hint")
+    else:
+        print("missing_dependency")
 else:
     print("unknown")
 PY
@@ -179,7 +188,7 @@ if row_status != "ok":
     raise SystemExit(0)
 if pdf_status == "not_applicable":
     print("not_applicable")
-elif pdf_status in {"ok", "missing_dependency", "fail", "partial", "unknown"}:
+elif pdf_status in {"ok", "missing_dependency", "needs_password_hint", "fail", "partial", "unknown"}:
     print(pdf_status)
 else:
     print("unknown")

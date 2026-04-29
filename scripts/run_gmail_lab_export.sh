@@ -176,12 +176,21 @@ statuses = {row.get("status", "") for row in rows}
 ok_statuses = {"ok_text", "ok_ocr"}
 if statuses and statuses <= ok_statuses:
     print("ok")
+elif "needs_password_hint" in statuses and statuses <= (ok_statuses | {"needs_password_hint"}):
+    print("partial" if statuses & ok_statuses else "needs_password_hint")
 elif "missing_dependency" in statuses and statuses <= (ok_statuses | {"missing_dependency"}):
     print("partial" if statuses & ok_statuses else "missing_dependency")
 elif "fail" in statuses and statuses <= (ok_statuses | {"fail"}):
     print("partial" if statuses & ok_statuses else "fail")
-elif "missing_dependency" in statuses or "fail" in statuses:
-    print("partial" if statuses & ok_statuses else ("missing_dependency" if "missing_dependency" in statuses and "fail" not in statuses else "fail"))
+elif "needs_password_hint" in statuses or "missing_dependency" in statuses or "fail" in statuses:
+    if statuses & ok_statuses:
+        print("partial")
+    elif "fail" in statuses:
+        print("fail")
+    elif "needs_password_hint" in statuses:
+        print("needs_password_hint")
+    else:
+        print("missing_dependency")
 else:
     print("unknown")
 PY
@@ -202,8 +211,10 @@ elif all(value == "ok" for value in statuses):
     print("ok")
 elif any(value == "partial" for value in statuses):
     print("partial")
-elif any(value == "ok" for value in statuses) and any(value in {"missing_dependency", "fail", "unknown"} for value in statuses):
+elif any(value == "ok" for value in statuses) and any(value in {"missing_dependency", "needs_password_hint", "fail", "unknown"} for value in statuses):
     print("partial")
+elif any(value == "needs_password_hint" for value in statuses) and not any(value in {"missing_dependency", "fail", "unknown"} for value in statuses):
+    print("needs_password_hint")
 elif any(value == "missing_dependency" for value in statuses) and not any(value in {"fail", "unknown"} for value in statuses):
     print("missing_dependency")
 elif any(value == "fail" for value in statuses):

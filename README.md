@@ -148,6 +148,8 @@ after the run, inspect:
 - `./runs/my-first-run/raw/`
 - `./runs/my-first-run/final/`
 
+read `asset_manifest.tsv` before trusting `final/`. `final/` is a convenience view; rows with `analysis_date_status=fallback` stay in `raw/` as `status=needs_review` until a real artifact, thread, provider, or filename date is recovered.
+
 if you are testing historical mailbox recovery rather than just one export, also run:
 
 ```bash
@@ -273,9 +275,10 @@ metadata layer:
   - `owner_source`
   - `owner_status` = `likely_owner|weak_owner|unknown_owner`
   - provider + confidence
-  - `status` = `ok|missing_raw|non_result|sidecar`
+  - `status` = `ok|missing_raw|non_result|sidecar|needs_review`
 - obvious non-result support attachments stay in `raw/`, are marked `non_result`, and are not promoted into `final/`
 - formal sidecars such as `.sig` stay in `raw/`, are marked `sidecar`, and are not promoted as clinical result files
+- assets whose only date is the run date fallback are marked `needs_review` and are not promoted into `final/`
 
 claims layer:
 - `claims_manifest.tsv` records:
@@ -299,17 +302,38 @@ claims layer:
 
 password-protected pdf lane:
 - the runners also create `pdf_text/<target>/pdf_text_manifest.tsv`
+- password values are resolved by `gmail_lab/core/secrets/`; gmail extraction only supplies hints and context
 - extraction order is:
   - plain `pdftotext`
-  - password-aware `pdftotext` using inferred candidates
+  - password-aware `pdftotext` using local secret candidates
   - password-aware `pdftoppm` + `tesseract` OCR fallback
 - password candidates can come from:
-  - provider metadata such as `birthDate`
-  - gmail thread text such as `password is your birth date DDMMYYYY`
-  - explicit env hints:
-    - `PDF_BIRTH_DATE=1970-01-31`
-    - `PDF_PASSWORD_CANDIDATES=31011970,19700131`
-- manifests keep `password_source`, but redact the concrete password value
+  - gmail/provider hints such as `password is your birth date DDMMYYYY`
+  - local session cache, OS keychain, or encrypted local fallback
+  - explicit email text when the email contains a concrete password
+  - explicit run-level env hints:
+    - `PDF_BIRTH_DATE=<local-birth-date>`
+    - `PDF_PASSWORD_CANDIDATES=<candidate-1>,<candidate-2>`
+  - an explicit tty prompt through `--prompt-secrets` or `PDF_PASSWORD_PROMPT=1`
+- practical run-level example:
+
+```bash
+PDF_BIRTH_DATE='<local-birth-date>' \
+PDF_PASSWORD_CANDIDATES='<candidate-1>,<candidate-2>' \
+./scripts/run_gmail_lab_export.sh ./tmp/my_targets.tsv ./runs/my-first-run
+```
+
+- prompt example for a local one-off run:
+
+```bash
+./scripts/extract_pdf_text.py ./runs/my-first-run/raw ./tmp/pdf-text-check \
+  --prompt-secrets \
+  --remember-secret session
+```
+
+- persistence choices are `never|session|keychain|encrypted-file`; permanent persistence is opt-in
+- manifests keep `password_source`, `secret_scope`, and `secret_persistence`, but redact the concrete password value
+- encrypted PDFs with a hint and no available local secret emit `status=needs_password_hint` instead of hanging in non-interactive runs
 - `pdf_text_manifest.tsv` status now distinguishes `missing_dependency` from real extraction failure
 
 image-heavy targets:
@@ -326,6 +350,7 @@ date policy:
   - filename
   - run fallback
 - if the date is indirect, the filename still carries it, and `asset_manifest.tsv` keeps the source + status so downstream ingest can tell `direct` from `inferred`
+- if the only date is `run_fallback`, the asset is kept out of `final/` with `status=needs_review`
 
 portal boundary:
 - current support proves `gmail thread -> tokenized portal link -> provider pdf`

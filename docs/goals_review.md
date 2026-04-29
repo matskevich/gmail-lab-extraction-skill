@@ -22,6 +22,7 @@
 - live regression runner for known historical cases
 - OCR for image assets
 - password-hinted PDF text extraction with OCR fallback
+- local secret-resolution layer for passworded PDFs
 - reproducible runs with `run_manifest.tsv`
 - regression review condensed into `regression_summary.tsv`
 - explicit separation between acquisition status and enrichment status
@@ -29,6 +30,7 @@
 - metadata derivation for `owner`
 - non-result support attachments can stay in `raw/` without promotion to `final/`
 - canonical filenames in `final/`
+- fallback-dated assets stay in `raw/` as `needs_review` instead of receiving fresh-looking final filenames
 - reusable repo + skill structure
 - self-hosted local-first product boundary is now explicit in docs
 - primary user is now explicitly another ai agent
@@ -38,7 +40,7 @@
 - `analysis_date` is sometimes inferred from gmail thread date, not direct from artifact
 - `owner` can still be `weak_owner` or `unknown_owner` on forwarded / context-only mails
 - provider detection is heuristic outside explicit provider hints
-- passworded PDFs still need either a discoverable rule in context or an explicit operator hint
+- passworded PDFs still need either a discoverable hint plus a local secret source, a run-level env hint, or an explicit prompt secret
 - OCR/PDF-text quality still depends on local binaries, but missing tools are now reported as `missing_dependency` instead of fake extraction failure
 
 ### red

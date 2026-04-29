@@ -84,12 +84,20 @@ def summarize_pdf_text_manifest(path: Path) -> str:
     ok_statuses = {"ok_text", "ok_ocr"}
     if statuses and statuses <= ok_statuses:
         return "ok"
+    if "needs_password_hint" in statuses and statuses <= (ok_statuses | {"needs_password_hint"}):
+        return "partial" if statuses & ok_statuses else "needs_password_hint"
     if "missing_dependency" in statuses and statuses <= (ok_statuses | {"missing_dependency"}):
         return "partial" if statuses & ok_statuses else "missing_dependency"
     if "fail" in statuses and statuses <= (ok_statuses | {"fail"}):
         return "partial" if statuses & ok_statuses else "fail"
-    if "missing_dependency" in statuses or "fail" in statuses:
-        return "partial" if statuses & ok_statuses else ("missing_dependency" if "missing_dependency" in statuses and "fail" not in statuses else "fail")
+    if "needs_password_hint" in statuses or "missing_dependency" in statuses or "fail" in statuses:
+        if statuses & ok_statuses:
+            return "partial"
+        if "fail" in statuses:
+            return "fail"
+        if "needs_password_hint" in statuses:
+            return "needs_password_hint"
+        return "missing_dependency"
     return "unknown"
 
 
@@ -103,8 +111,10 @@ def combine_status(acquisition_status: str, *statuses: str) -> str:
         return "ok"
     if any(item == "partial" for item in effective):
         return "partial"
-    if any(item == "ok" for item in effective) and any(item in {"missing_dependency", "fail", "unknown"} for item in effective):
+    if any(item == "ok" for item in effective) and any(item in {"missing_dependency", "needs_password_hint", "fail", "unknown"} for item in effective):
         return "partial"
+    if any(item == "needs_password_hint" for item in effective) and not any(item in {"missing_dependency", "fail", "unknown"} for item in effective):
+        return "needs_password_hint"
     if any(item == "missing_dependency" for item in effective) and not any(item in {"fail", "unknown"} for item in effective):
         return "missing_dependency"
     if any(item == "fail" for item in effective):
