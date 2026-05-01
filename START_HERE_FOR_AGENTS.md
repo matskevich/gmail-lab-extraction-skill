@@ -101,6 +101,8 @@ gmail-lab emit-analysis-manifest --output ./analysis_manifest.tsv
 
 historical cmd threads can still regress into inline-only extraction when gmail attachment controls hydrate late. do not claim completeness from one happy-path smoke run.
 
+when reconciling staged result emails from the same provider/order, do not rely on a broad query plus one `final/` artifact. split by email date/subject, compare attachment hashes, and preserve superseded partials as provenance. if multiple source PDFs share the same filename, retrying `extract_pdf_text.py` into one output directory can overwrite text outputs; use per-slug output directories before diffing.
+
 ## immediate next work
 
 1. implement gmail api native discovery/acquisition
