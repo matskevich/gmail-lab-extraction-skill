@@ -5,6 +5,7 @@ agent-first self-hosted open-source toolkit for exporting lab/result history fro
 agent handoff docs:
 - `START_HERE_FOR_AGENTS.md`
 - `AGENTS.md`
+- `docs/agent_install.md`
 - `docs/api_first_architecture.md`
 - `docs/self_hosted_product.md`
 - `docs/architecture.md`
@@ -71,7 +72,16 @@ completeness rule:
 ./install.sh
 ```
 
-by default this copies the bundled skill into `~/.codex/skills/gmail-browser-attachments`.
+by default this copies the bundled Codex skills into `~/.codex/skills/`:
+
+- `gmail-lab-export`
+- `gmail-browser-attachments`
+
+to also install the Claude Code skill into `~/.claude/skills/`:
+
+```bash
+INSTALL_CLAUDE_SKILLS=1 ./install.sh
+```
 
 ### option 2: install through codex skill-installer from github
 
@@ -84,6 +94,8 @@ python3 "$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-
 ```
 
 restart codex after install so the new skill is discovered.
+
+for Claude Code and generic-agent setup, see `docs/agent_install.md`.
 
 ## repo use
 

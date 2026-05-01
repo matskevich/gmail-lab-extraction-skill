@@ -22,19 +22,20 @@ read this file first.
 
 1. `README.md`
 2. `AGENTS.md`
-3. `docs/api_first_architecture.md`
-4. `docs/self_hosted_product.md`
-5. `docs/agent_first_roadmap.md`
-6. `docs/completeness_framework.md`
-7. `docs/test_strategy.md`
-8. `docs/release_checklist.md`
-9. `docs/release_verdict.md`
-10. `PRIVACY.md`
-11. `CONTRIBUTING.md`
-12. `SUPPORT.md`
-13. `ROADMAP.md`
-14. `docs/community_intake.md`
-15. `schemas/*.schema.json`
+3. `docs/agent_install.md`
+4. `docs/api_first_architecture.md`
+5. `docs/self_hosted_product.md`
+6. `docs/agent_first_roadmap.md`
+7. `docs/completeness_framework.md`
+8. `docs/test_strategy.md`
+9. `docs/release_checklist.md`
+10. `docs/release_verdict.md`
+11. `PRIVACY.md`
+12. `CONTRIBUTING.md`
+13. `SUPPORT.md`
+14. `ROADMAP.md`
+15. `docs/community_intake.md`
+16. `schemas/*.schema.json`
 
 ## canonical truths
 
@@ -61,6 +62,13 @@ python -m pytest
 python -m ruff check .
 python -m mypy gmail_lab
 ```
+
+## agent packaging
+
+- Codex workflow skill: `skills/gmail-lab-export`
+- Codex CDP helper skill: `skills/gmail-browser-attachments`
+- Claude Code project skill: `.claude/skills/gmail-lab-export`
+- install/use map: `docs/agent_install.md`
 
 for live browser runs:
 
