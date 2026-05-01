@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -125,8 +127,11 @@ def combine_status(acquisition_status: str, *statuses: str) -> str:
 def run_cmd(args: list[str], stdout_path: Path, stderr_path: Path) -> None:
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     stderr_path.parent.mkdir(parents=True, exist_ok=True)
+    repo_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{repo_root}{os.pathsep}{env['PYTHONPATH']}" if env.get("PYTHONPATH") else str(repo_root)
     with stdout_path.open("w", encoding="utf-8") as stdout_fh, stderr_path.open("w", encoding="utf-8") as stderr_fh:
-        subprocess.run(args, check=False, stdout=stdout_fh, stderr=stderr_fh, text=True)
+        subprocess.run(args, check=False, stdout=stdout_fh, stderr=stderr_fh, text=True, env=env)
 
 
 def maybe_rerun_gmail_row(repo_root: Path, row: dict[str, str], rerun_all: bool) -> dict[str, str]:
@@ -149,12 +154,12 @@ def maybe_rerun_gmail_row(repo_root: Path, row: dict[str, str], rerun_all: bool)
     json_log = Path(row["json_log"])
 
     run_cmd(
-        ["python3", str(repo_root / "skills/gmail-browser-attachments/scripts/ocr_image_assets.py"), str(raw_dir), str(ocr_dir)],
+        [sys.executable, str(repo_root / "skills/gmail-browser-attachments/scripts/ocr_image_assets.py"), str(raw_dir), str(ocr_dir)],
         log_dir / f"{raw_dir.name}.ocr.stdout.log",
         log_dir / f"{raw_dir.name}.ocr.stderr.log",
     )
     run_cmd(
-        ["python3", str(repo_root / "scripts/extract_pdf_text.py"), str(raw_dir), str(pdf_text_dir), "--thread-json", str(json_log)],
+        [sys.executable, str(repo_root / "scripts/extract_pdf_text.py"), str(raw_dir), str(pdf_text_dir), "--thread-json", str(json_log)],
         log_dir / f"{raw_dir.name}.pdf_text.stdout.log",
         log_dir / f"{raw_dir.name}.pdf_text.stderr.log",
     )
@@ -186,7 +191,7 @@ def maybe_rerun_portal_row(repo_root: Path, row: dict[str, str], rerun_all: bool
 
     run_cmd(
         [
-            "python3",
+            sys.executable,
             str(repo_root / "scripts/extract_pdf_text.py"),
             str(raw_dir),
             str(pdf_text_dir),
@@ -237,7 +242,7 @@ def main() -> int:
 
     write_tsv(manifest_path, fieldnames, rows)
     run_cmd(
-        ["python3", str(repo_root / "scripts/derive_asset_metadata.py"), str(run_dir)],
+        [sys.executable, str(repo_root / "scripts/derive_asset_metadata.py"), str(run_dir)],
         run_dir / "logs/asset_metadata.stdout.log",
         run_dir / "logs/asset_metadata.stderr.log",
     )

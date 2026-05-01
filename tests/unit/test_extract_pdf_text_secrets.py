@@ -1,9 +1,34 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from gmail_lab.core.secrets.resolver import SecretResolver
 from scripts import extract_pdf_text
+
+
+def test_extract_pdf_text_script_help_runs_without_pythonpath(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(repo_root / "scripts" / "extract_pdf_text.py"),
+            "--help",
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert "Extract text from PDFs" in proc.stdout
 
 
 def test_plain_pdf_does_not_prompt_for_secret(tmp_path: Path, monkeypatch) -> None:

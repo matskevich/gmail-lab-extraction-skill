@@ -7,21 +7,34 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol, cast
 
-import keyring
-from cryptography.fernet import Fernet, InvalidToken
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-
-from gmail_lab.core.config import resolve_root
 from gmail_lab.core.secrets.models import SecretMetadata, SecretPersistence
 
 SERVICE_NAME = "gmail-lab"
+DEFAULT_ROOT = Path.home() / ".gmail-lab"
 
 
 class SecretStoreUnavailable(RuntimeError):
     pass
+
+
+def _load_keyring() -> Any:
+    try:
+        import keyring
+    except ImportError as exc:  # pragma: no cover - depends on host python
+        raise SecretStoreUnavailable("keyring is not installed") from exc
+    return keyring
+
+
+def _load_crypto() -> tuple[Any, Any, Any, Any]:
+    try:
+        from cryptography.fernet import Fernet, InvalidToken
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    except ImportError as exc:  # pragma: no cover - depends on host python
+        raise SecretStoreUnavailable("cryptography is not installed") from exc
+    return Fernet, InvalidToken, hashes, PBKDF2HMAC
 
 
 class PersistentSecretStore(Protocol):
@@ -50,6 +63,15 @@ def _metadata_with_timestamp(metadata: SecretMetadata) -> SecretMetadata:
     )
 
 
+def resolve_secret_root(root: Path | None = None) -> Path:
+    if root is not None:
+        return root.expanduser().resolve()
+    env_root = os.environ.get("GMAIL_LAB_ROOT")
+    if env_root:
+        return Path(env_root).expanduser().resolve()
+    return DEFAULT_ROOT
+
+
 class MemorySecretStore:
     def __init__(self) -> None:
         self._values: dict[str, str] = {}
@@ -68,25 +90,33 @@ class MemorySecretStore:
 class KeyringSecretStore:
     def get(self, secret_id: str) -> str | None:
         try:
-            return keyring.get_password(SERVICE_NAME, secret_id)
+            keyring = _load_keyring()
+            value = keyring.get_password(SERVICE_NAME, secret_id)
+            return str(value) if value is not None else None
+        except SecretStoreUnavailable:
+            raise
         except Exception as exc:  # pragma: no cover - backend-dependent
             raise SecretStoreUnavailable(str(exc)) from exc
 
     def put(self, secret_id: str, value: str, metadata: SecretMetadata) -> None:
         del metadata
         try:
+            keyring = _load_keyring()
             keyring.set_password(SERVICE_NAME, secret_id, value)
+        except SecretStoreUnavailable:
+            raise
         except Exception as exc:  # pragma: no cover - backend-dependent
             raise SecretStoreUnavailable(str(exc)) from exc
 
 
 class EncryptedFileSecretStore:
     def __init__(self, root: Path | None = None) -> None:
-        self.root = (root or resolve_root(None)).expanduser().resolve()
+        self.root = resolve_secret_root(root)
         self.secret_dir = self.root / "secrets"
         self._fernet = self._build_fernet()
 
-    def _build_fernet(self) -> Fernet:
+    def _build_fernet(self) -> Any:
+        Fernet, _InvalidToken, hashes, PBKDF2HMAC = _load_crypto()
         env_key = os.environ.get("GMAIL_LAB_SECRETS_KEY", "").strip()
         if env_key:
             return Fernet(env_key.encode("utf-8"))
@@ -119,9 +149,10 @@ class EncryptedFileSecretStore:
         if not path.exists():
             return None
         try:
+            _Fernet, InvalidToken, _hashes, _PBKDF2HMAC = _load_crypto()
             payload = json.loads(path.read_text(encoding="utf-8"))
             token = str(payload.get("token", "")).encode("utf-8")
-            return self._fernet.decrypt(token).decode("utf-8")
+            return cast(bytes, self._fernet.decrypt(token)).decode("utf-8")
         except (InvalidToken, json.JSONDecodeError, OSError) as exc:
             raise SecretStoreUnavailable(str(exc)) from exc
 
@@ -144,7 +175,7 @@ class SecretStore:
         keychain: PersistentSecretStore | None = None,
         encrypted_file: PersistentSecretStore | None = None,
     ) -> None:
-        self.root = (root or resolve_root(None)).expanduser().resolve()
+        self.root = resolve_secret_root(root)
         self.keychain = keychain or KeyringSecretStore()
         self._encrypted_file = encrypted_file
 
