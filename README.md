@@ -88,7 +88,7 @@ INSTALL_CLAUDE_SKILLS=1 ./install.sh
 after publishing this repo to github:
 
 ```bash
-python3 "$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py" \
+"${PYTHON_BIN:-.venv/bin/python}" "$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py" \
   --repo <owner>/gmail-lab-extraction-skill \
   --path skills/gmail-browser-attachments
 ```
@@ -411,7 +411,7 @@ node "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_collect_attach
 ```
 
 ```bash
-python3 "$HOME/.codex/skills/gmail-browser-attachments/scripts/ocr_image_assets.py" \
+"${PYTHON_BIN:-.venv/bin/python}" "$HOME/.codex/skills/gmail-browser-attachments/scripts/ocr_image_assets.py" \
   ./downloads \
   ./ocr
 ```

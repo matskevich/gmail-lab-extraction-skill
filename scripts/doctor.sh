@@ -5,6 +5,10 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SKILL_DIR="$REPO_ROOT/skills/gmail-browser-attachments"
 PORT="${PORT:-9222}"
 CHROME_APP="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+PYTHON_BIN="${PYTHON_BIN:-$REPO_ROOT/.venv/bin/python}"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="python3"
+fi
 
 check_bin() {
   local name="$1"
@@ -17,7 +21,24 @@ check_bin() {
 
 echo "== bins =="
 check_bin node
-check_bin python3
+if command -v "$PYTHON_BIN" >/dev/null 2>&1 || [[ -x "$PYTHON_BIN" ]]; then
+  python_version="$("$PYTHON_BIN" - <<'PY'
+import sys
+print(sys.version.split()[0])
+PY
+)"
+  if "$PYTHON_BIN" - <<'PY'
+import sys
+raise SystemExit(0 if sys.version_info >= (3, 11) else 1)
+PY
+  then
+    printf 'ok\tpython\t%s\t%s\n' "$PYTHON_BIN" "$python_version"
+  else
+    printf 'bad\tpython\t%s\t%s (need >=3.11)\n' "$PYTHON_BIN" "$python_version"
+  fi
+else
+  printf 'missing\tpython\t%s\n' "$PYTHON_BIN"
+fi
 check_bin rsync
 check_bin file
 check_bin pdftotext
@@ -45,17 +66,19 @@ node --check "$SKILL_DIR/scripts/gmail_collect_inline_assets_from_query.mjs"
 node --check "$SKILL_DIR/scripts/gmail_fetch_attachment_via_cdp.mjs"
 node --check "$SKILL_DIR/scripts/chrome_cdp_create_target.mjs"
 node --check "$SKILL_DIR/scripts/chrome_cdp_close_target.mjs"
-python3 -m py_compile "$SKILL_DIR/scripts/ocr_image_assets.py"
+"$PYTHON_BIN" -m py_compile "$SKILL_DIR/scripts/ocr_image_assets.py"
 zsh -n "$SKILL_DIR/scripts/start_chrome_cdp_clone.sh"
 zsh -n "$SKILL_DIR/scripts/gmail_find_page_ws_url.sh"
 zsh -n "$SKILL_DIR/scripts/gmail_smoke_check.sh"
+zsh -n "$REPO_ROOT/scripts/run_gmail_discovery.sh"
 zsh -n "$REPO_ROOT/scripts/run_gmail_lab_export.sh"
 zsh -n "$REPO_ROOT/scripts/run_portal_lab_export.sh"
+zsh -n "$REPO_ROOT/scripts/run_regression_suite.sh"
 echo "ok\tsyntax\tall checked"
 
 echo
 echo "== cdp port =="
-python3 - <<'PY' "$PORT"
+"$PYTHON_BIN" - <<'PY' "$PORT"
 import json
 import sys
 import urllib.request

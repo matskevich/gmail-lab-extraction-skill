@@ -14,6 +14,14 @@ PYTHON_BIN="${PYTHON_BIN:-$REPO_ROOT/.venv/bin/python}"
 if [[ ! -x "$PYTHON_BIN" ]]; then
   PYTHON_BIN="python3"
 fi
+if ! "$PYTHON_BIN" - <<'PY'
+import sys
+if sys.version_info < (3, 11):
+    raise SystemExit(f"python >=3.11 required, got {sys.version.split()[0]}; create .venv or set PYTHON_BIN")
+PY
+then
+  exit 1
+fi
 SKILL_DIR="$REPO_ROOT/skills/gmail-browser-attachments"
 TARGETS_FILE="$("$PYTHON_BIN" - <<'PY' "$1"
 from pathlib import Path
