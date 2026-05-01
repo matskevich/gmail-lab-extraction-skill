@@ -9,15 +9,28 @@ if [[ $# -lt 1 ]]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+PYTHON_BIN="${PYTHON_BIN:-$REPO_ROOT/.venv/bin/python}"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="python3"
+fi
+if ! "$PYTHON_BIN" - <<'PY'
+import sys
+if sys.version_info < (3, 11):
+    raise SystemExit(f"python >=3.11 required, got {sys.version.split()[0]}; create .venv or set PYTHON_BIN")
+PY
+then
+  exit 1
+fi
 SKILL_DIR="$REPO_ROOT/skills/gmail-browser-attachments"
-TARGETS_FILE="$(python3 - <<'PY' "$1"
+TARGETS_FILE="$("$PYTHON_BIN" - <<'PY' "$1"
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).expanduser().resolve())
 PY
 )"
 RUN_DIR_INPUT="${2:-$REPO_ROOT/runs/run-$(date +%Y%m%d-%H%M%S)}"
-RUN_DIR="$(python3 - <<'PY' "$RUN_DIR_INPUT"
+RUN_DIR="$("$PYTHON_BIN" - <<'PY' "$RUN_DIR_INPUT"
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).expanduser().resolve())
@@ -74,7 +87,7 @@ trap cleanup EXIT INT TERM
 echo -e "line_no\tslug\tmode\tstatus\textracted_count\tocr_status\tpdf_text_status\tenrichment_status\traw_dir\tocr_manifest\tpdf_text_manifest\tjson_log\tstderr_log\tquery\tneedle" > "$MANIFEST_TSV"
 
 port_is_up() {
-  python3 - <<'PY' "$PORT"
+  "$PYTHON_BIN" - <<'PY' "$PORT"
 import sys
 import urllib.request
 port = sys.argv[1]
@@ -87,7 +100,7 @@ PY
 }
 
 slugify() {
-  python3 - <<'PY' "$1"
+  "$PYTHON_BIN" - <<'PY' "$1"
 import re
 import sys
 value = sys.argv[1].strip().lower()
@@ -99,7 +112,7 @@ PY
 }
 
 browser_ws_url() {
-  python3 - <<'PY' "$PORT"
+  "$PYTHON_BIN" - <<'PY' "$PORT"
 import json
 import sys
 import urllib.request
@@ -111,7 +124,7 @@ PY
 }
 
 resolve_gmail_page_ws_url() {
-  python3 - <<'PY' "$PORT"
+  "$PYTHON_BIN" - <<'PY' "$PORT"
 import json
 import sys
 import time
@@ -131,7 +144,7 @@ PY
 }
 
 summarize_ocr_manifest_status() {
-  python3 - <<'PY' "$1"
+  "$PYTHON_BIN" - <<'PY' "$1"
 import csv
 import sys
 from pathlib import Path
@@ -159,7 +172,7 @@ PY
 }
 
 summarize_pdf_text_manifest_status() {
-  python3 - <<'PY' "$1"
+  "$PYTHON_BIN" - <<'PY' "$1"
 import csv
 import sys
 from pathlib import Path
@@ -176,19 +189,28 @@ statuses = {row.get("status", "") for row in rows}
 ok_statuses = {"ok_text", "ok_ocr"}
 if statuses and statuses <= ok_statuses:
     print("ok")
+elif "needs_password_hint" in statuses and statuses <= (ok_statuses | {"needs_password_hint"}):
+    print("partial" if statuses & ok_statuses else "needs_password_hint")
 elif "missing_dependency" in statuses and statuses <= (ok_statuses | {"missing_dependency"}):
     print("partial" if statuses & ok_statuses else "missing_dependency")
 elif "fail" in statuses and statuses <= (ok_statuses | {"fail"}):
     print("partial" if statuses & ok_statuses else "fail")
-elif "missing_dependency" in statuses or "fail" in statuses:
-    print("partial" if statuses & ok_statuses else ("missing_dependency" if "missing_dependency" in statuses and "fail" not in statuses else "fail"))
+elif "needs_password_hint" in statuses or "missing_dependency" in statuses or "fail" in statuses:
+    if statuses & ok_statuses:
+        print("partial")
+    elif "fail" in statuses:
+        print("fail")
+    elif "needs_password_hint" in statuses:
+        print("needs_password_hint")
+    else:
+        print("missing_dependency")
 else:
     print("unknown")
 PY
 }
 
 combine_enrichment_status() {
-  python3 - <<'PY' "$1" "$2" "$3"
+  "$PYTHON_BIN" - <<'PY' "$1" "$2" "$3"
 import sys
 
 row_status, ocr_status, pdf_status = sys.argv[1:4]
@@ -202,8 +224,10 @@ elif all(value == "ok" for value in statuses):
     print("ok")
 elif any(value == "partial" for value in statuses):
     print("partial")
-elif any(value == "ok" for value in statuses) and any(value in {"missing_dependency", "fail", "unknown"} for value in statuses):
+elif any(value == "ok" for value in statuses) and any(value in {"missing_dependency", "needs_password_hint", "fail", "unknown"} for value in statuses):
     print("partial")
+elif any(value == "needs_password_hint" for value in statuses) and not any(value in {"missing_dependency", "fail", "unknown"} for value in statuses):
+    print("needs_password_hint")
 elif any(value == "missing_dependency" for value in statuses) and not any(value in {"fail", "unknown"} for value in statuses):
     print("missing_dependency")
 elif any(value == "fail" for value in statuses):
@@ -282,7 +306,7 @@ while IFS=$'\t' read -r query needle mode; do
     row_status="extract_fail"
   fi
 
-  extracted_count="$(python3 - <<'PY' "$json_log" "$row_status"
+  extracted_count="$("$PYTHON_BIN" - <<'PY' "$json_log" "$row_status"
 import json
 import sys
 path, row_status = sys.argv[1], sys.argv[2]
@@ -299,8 +323,8 @@ PY
 )"
 
   if [[ "$row_status" == "ok" ]]; then
-    python3 "$SKILL_DIR/scripts/ocr_image_assets.py" "$target_raw" "$target_ocr" >"$LOG_DIR/$slug.ocr.stdout.log" 2>"$LOG_DIR/$slug.ocr.stderr.log" || true
-    python3 "$REPO_ROOT/scripts/extract_pdf_text.py" "$target_raw" "$target_pdf_text" --thread-json "$json_log" >"$LOG_DIR/$slug.pdf_text.stdout.log" 2>"$LOG_DIR/$slug.pdf_text.stderr.log" || true
+    "$PYTHON_BIN" "$SKILL_DIR/scripts/ocr_image_assets.py" "$target_raw" "$target_ocr" >"$LOG_DIR/$slug.ocr.stdout.log" 2>"$LOG_DIR/$slug.ocr.stderr.log" || true
+    "$PYTHON_BIN" "$REPO_ROOT/scripts/extract_pdf_text.py" "$target_raw" "$target_pdf_text" --thread-json "$json_log" >"$LOG_DIR/$slug.pdf_text.stdout.log" 2>"$LOG_DIR/$slug.pdf_text.stderr.log" || true
   fi
 
   if [[ ! -f "$ocr_manifest" ]]; then
@@ -320,6 +344,6 @@ PY
     >> "$MANIFEST_TSV"
 done < "$TARGETS_FILE"
 
-python3 "$REPO_ROOT/scripts/derive_asset_metadata.py" "$RUN_DIR" >"$LOG_DIR/asset_metadata.stdout.log" 2>"$LOG_DIR/asset_metadata.stderr.log" || true
+"$PYTHON_BIN" "$REPO_ROOT/scripts/derive_asset_metadata.py" "$RUN_DIR" >"$LOG_DIR/asset_metadata.stdout.log" 2>"$LOG_DIR/asset_metadata.stderr.log" || true
 
 echo "$RUN_DIR"

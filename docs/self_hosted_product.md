@@ -49,6 +49,7 @@ for the human operator:
 - run extraction
 - inspect `discovery_manifest.tsv`, `run_manifest.tsv`, `regression_summary.tsv`
 - review `raw/`, `pdf_text/`, `ocr/`, and `final/`
+- read manifests before trusting filenames in `final/`; `status=needs_review` means the raw file exists but the metadata is still too weak for downstream use
 
 ## explicit non-goals for v1
 

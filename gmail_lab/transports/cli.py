@@ -71,12 +71,15 @@ def identity_status_command(ctx: click.Context) -> None:
     state_store = SqliteStateStore(paths.state_db)
     state_store.initialize()
     config = load_config(paths.root)
+    identity = config.identity.model_dump(mode="python")
+    if identity.get("birth_date"):
+        identity["birth_date"] = "redacted"
     mailboxes = [asdict(row) for row in state_store.list_mailbox_connections()]
     click.echo(
         json.dumps(
             {
                 "root": str(paths.root),
-                "identity": config.identity.model_dump(mode="python"),
+                "identity": identity,
                 "mailboxes": mailboxes,
             },
             ensure_ascii=False,

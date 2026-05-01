@@ -107,15 +107,15 @@ brew install tesseract poppler
 
 8. if a PDF is password-protected, pass hints to the repo runner or the text extractor:
 ```bash
-PDF_BIRTH_DATE=1970-01-31 \
-PDF_PASSWORD_CANDIDATES=31011970 \
-python3 ./scripts/extract_pdf_text.py ./downloads ./pdf_text
+python3 ./scripts/extract_pdf_text.py ./downloads ./pdf_text \
+  --prompt-secrets \
+  --remember-secret session
 ```
 
 password policy:
-- prefer inferred candidates from thread/provider context first
-- allow explicit operator hints through env vars
-- never persist the concrete password in manifests; only keep `password_source`
+- email/provider text supplies hints, not secret values
+- local runtime supplies secrets through prompt, session cache, keychain, encrypted local fallback, or env for automation
+- never persist the concrete password in manifests; only keep redacted `password_source`, `secret_scope`, and `secret_persistence`
 
 status policy:
 - treat `status` in `run_manifest.tsv` as acquisition only

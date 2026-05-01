@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gmail Lab Export"
+  short_description: "Run Gmail lab/result export workflows and interpret manifests"
+  default_prompt: "Use $gmail-lab-export to discover Gmail lab/result threads, export local evidence, handle passworded PDFs safely, and explain the manifests before trusting final/."

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
@@ -8,8 +9,17 @@ import os
 import re
 import shutil
 import subprocess
-from datetime import datetime
+import sys
+from hashlib import sha256
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from gmail_lab.core.secrets.models import RememberSecret, SecretCandidate, SecretContext
+from gmail_lab.core.secrets.resolver import SecretResolver
+from gmail_lab.core.secrets.store import SecretStore
 
 
 def read_json(path: Path) -> dict:
@@ -42,102 +52,12 @@ def iter_pdfs(input_path: Path):
             yield p
 
 
-def normalize_date(value: str) -> datetime | None:
-    text = (value or "").strip()
-    if not text:
-        return None
-    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y", "%Y/%m/%d", "%d/%m/%Y", "%Y%m%d", "%d%m%Y"):
-        try:
-            return datetime.strptime(text, fmt)
-        except ValueError:
-            pass
-    return None
-
-
-def password_candidates_from_datetime(dt: datetime) -> list[str]:
-    return [
-        dt.strftime("%d%m%Y"),
-        dt.strftime("%Y%m%d"),
-        dt.strftime("%d-%m-%Y"),
-        dt.strftime("%d.%m.%Y"),
-        dt.strftime("%d/%m/%Y"),
-    ]
-
-
-def extract_dates(text: str) -> list[datetime]:
-    found: list[datetime] = []
-    patterns = [
-        r"\b\d{2}[./-]\d{2}[./-]\d{4}\b",
-        r"\b\d{4}[./-]\d{2}[./-]\d{2}\b",
-        r"\b\d{8}\b",
-    ]
-    seen = set()
-    for pattern in patterns:
-        for m in re.finditer(pattern, text):
-            raw = m.group(0)
-            dt = normalize_date(raw)
-            if not dt:
-                continue
-            key = dt.strftime("%Y-%m-%d")
-            if key in seen:
-                continue
-            seen.add(key)
-            found.append(dt)
-    return found
-
-
-def extract_explicit_passwords(text: str) -> list[str]:
-    out: list[str] = []
-    patterns = [
-        r"password[^0-9A-Za-z]{0,20}([0-9]{4,12})",
-        r"passcode[^0-9A-Za-z]{0,20}([0-9]{4,12})",
-        r"kata sandi[^0-9A-Za-z]{0,20}([0-9]{4,12})",
-    ]
-    seen = set()
-    for pattern in patterns:
-        for m in re.finditer(pattern, text, re.I):
-            pwd = m.group(1)
-            if pwd not in seen:
-                seen.add(pwd)
-                out.append(pwd)
-    return out
-
-
-def build_password_candidates(context_text: str, provider_json: dict) -> list[tuple[str, str]]:
-    candidates: list[tuple[str, str]] = []
-    seen = set()
-
-    def add(password: str, source: str):
-        pwd = (password or "").strip()
-        if not pwd or pwd in seen:
-            return
-        seen.add(pwd)
-        candidates.append((pwd, source))
-
-    for raw in os.environ.get("PDF_PASSWORD_CANDIDATES", "").split(","):
-        add(raw, "env_password_candidates")
-
-    birth_date_env = os.environ.get("PDF_BIRTH_DATE", "")
-    dt = normalize_date(birth_date_env)
-    if dt:
-        for pwd in password_candidates_from_datetime(dt):
-            add(pwd, "env_birth_date")
-
-    provider_birth_date = str((provider_json.get("meta", {}) or {}).get("birthDate", ""))
-    dt = normalize_date(provider_birth_date)
-    if dt:
-        for pwd in password_candidates_from_datetime(dt):
-            add(pwd, "provider_birth_date")
-
-    for pwd in extract_explicit_passwords(context_text):
-        add(pwd, "thread_explicit_password")
-
-    if re.search(r"birth date|date of birth|dob|ddmmyyyy", context_text, re.I):
-        for dt in extract_dates(context_text):
-            for pwd in password_candidates_from_datetime(dt):
-                add(pwd, "thread_birth_date_hint")
-
-    return candidates
+def file_sha256(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def pdftotext_extract(pdf_path: Path, password: str = "") -> tuple[bool, str, str]:
@@ -182,6 +102,32 @@ def redact_password(password: str) -> str:
     return "redacted"
 
 
+def provider_name(thread_json: dict, provider_json: dict) -> str:
+    hints = thread_json.get("providerHints", {}) if isinstance(thread_json, dict) else {}
+    if isinstance(hints, dict):
+        for key in ("provider", "name", "domain"):
+            value = str(hints.get(key, "")).strip()
+            if value:
+                return value.lower()
+    provider_meta = provider_json.get("meta", {}) if isinstance(provider_json, dict) else {}
+    for key in ("provider", "name", "title"):
+        value = str(provider_meta.get(key, "")).strip()
+        if value:
+            return value.lower()
+    return ""
+
+
+def thread_id(thread_json: dict) -> str:
+    for key in ("threadId", "messageId", "id"):
+        value = str(thread_json.get(key, "")).strip()
+        if value:
+            return value
+    href = str(thread_json.get("href", "")).strip()
+    if href:
+        return sha256(href.encode("utf-8")).hexdigest()
+    return ""
+
+
 def joined_context(thread_json: dict, provider_json: dict, pdf_path: Path) -> str:
     provider_meta = provider_json.get("meta", {}) if isinstance(provider_json, dict) else {}
     bits = [
@@ -190,17 +136,93 @@ def joined_context(thread_json: dict, provider_json: dict, pdf_path: Path) -> st
         str(thread_json.get("href", "")),
         str(provider_meta.get("title", "")),
         str(provider_meta.get("text", "")),
-        str(provider_meta.get("birthDate", "")),
         str(provider_meta.get("client", "")),
         pdf_path.name,
     ]
     return "\n".join(bit for bit in bits if bit)
 
 
-def try_extract(pdf_path: Path, output_dir: Path, thread_json: dict, provider_json: dict) -> dict[str, str]:
-    context = joined_context(thread_json, provider_json, pdf_path)
-    candidates = build_password_candidates(context, provider_json)
-    attempted = ["<empty>"] + [f"{redact_password(pwd)} ({source})" for pwd, source in candidates]
+def build_secret_context(thread_json: dict, provider_json: dict, pdf_path: Path) -> SecretContext:
+    context_text = joined_context(thread_json, provider_json, pdf_path)
+    return SecretContext(
+        provider=provider_name(thread_json, provider_json),
+        identity_alias="default",
+        attachment_sha256=file_sha256(pdf_path) if pdf_path.exists() else "",
+        gmail_thread_id=thread_id(thread_json),
+        hint_text=context_text,
+        thread_text=context_text,
+        provider_text="\n".join(str(v) for v in (provider_json.get("meta", {}) or {}).values()),
+        source_file=str(pdf_path),
+    )
+
+
+def is_password_error(stderr: str) -> bool:
+    return bool(
+        re.search(
+            r"incorrect password|requires a password|encrypted|command line error.*password|invalid password",
+            stderr,
+            re.I,
+        )
+    )
+
+
+def manifest_row(
+    pdf_path: Path,
+    *,
+    text_txt: Path | str = "",
+    method: str = "",
+    password_source: str = "",
+    password_used: str = "",
+    secret_scope: str = "",
+    secret_persistence: str = "none",
+    candidate_count: int = 0,
+    status: str,
+    notes: str = "",
+) -> dict[str, str]:
+    return {
+        "source_file": str(pdf_path),
+        "text_txt": str(text_txt),
+        "method": method,
+        "password_source": password_source,
+        "password_used": password_used,
+        "secret_scope": secret_scope,
+        "secret_persistence": secret_persistence,
+        "candidate_count": str(candidate_count),
+        "status": status,
+        "notes": notes,
+    }
+
+
+def try_extract(
+    pdf_path: Path,
+    output_dir: Path,
+    thread_json: dict,
+    provider_json: dict,
+    resolver: SecretResolver,
+    *,
+    prompt_secrets: bool = False,
+    remember_secret: RememberSecret = "never",
+) -> dict[str, str]:
+    context = build_secret_context(thread_json, provider_json, pdf_path)
+    candidates: list[SecretCandidate] = []
+    candidates_loaded = False
+    attempted = ["<empty>"]
+
+    def load_secret_candidates() -> list[SecretCandidate]:
+        nonlocal candidates_loaded, candidates, attempted
+        if candidates_loaded:
+            return candidates
+        candidates_loaded = True
+        candidates = resolver.candidates(
+            context,
+            prompt_secrets=prompt_secrets,
+            remember_secret=remember_secret,
+        )
+        attempted = ["<empty>"] + [
+            f"{redact_password(candidate.value)} ({candidate.source})" for candidate in candidates
+        ]
+        return candidates
+
     pdftotext_bin = shutil.which("pdftotext")
     pdftoppm_bin = shutil.which("pdftoppm")
     tesseract_bin = shutil.which("tesseract")
@@ -212,49 +234,57 @@ def try_extract(pdf_path: Path, output_dir: Path, thread_json: dict, provider_js
     notes_parts: list[str] = []
 
     stderr = ""
+    password_failure = False
     if pdftotext_bin:
         ok, text, stderr = pdftotext_extract(pdf_path)
+        password_failure = is_password_error(stderr)
         if ok and text.strip():
             txt_path = write_text_output(output_dir, pdf_path, text)
-            return {
-                "source_file": str(pdf_path),
-                "text_txt": str(txt_path),
-                "method": "pdftotext",
-                "password_source": "none",
-                "password_used": "",
-                "candidate_count": str(len(candidates)),
-                "status": "ok_text",
-                "notes": "",
-            }
+            return manifest_row(
+                pdf_path,
+                text_txt=txt_path,
+                method="pdftotext",
+                password_source="none",
+                candidate_count=0,
+                status="ok_text",
+            )
     else:
         notes_parts.append("missing=pdftotext")
 
-    attempts = [("", "none")]
+    if password_failure:
+        load_secret_candidates()
+
+    attempts = [SecretCandidate(value="", source="none", persistence="none")]
     attempts.extend(candidates)
     if pdftotext_bin:
-        for password, source in attempts[1:]:
-            ok, text, stderr = pdftotext_extract(pdf_path, password=password)
+        for candidate in attempts[1:]:
+            ok, text, stderr = pdftotext_extract(pdf_path, password=candidate.value)
+            password_failure = password_failure or is_password_error(stderr)
             if ok and text.strip():
                 txt_path = write_text_output(output_dir, pdf_path, text)
-                return {
-                    "source_file": str(pdf_path),
-                    "text_txt": str(txt_path),
-                    "method": "pdftotext_password",
-                    "password_source": source,
-                    "password_used": redact_password(password),
-                    "candidate_count": str(len(candidates)),
-                    "status": "ok_text",
-                    "notes": "",
-                }
+                return manifest_row(
+                    pdf_path,
+                    text_txt=txt_path,
+                    method="pdftotext_password",
+                    password_source=candidate.source,
+                    password_used=redact_password(candidate.value),
+                    secret_scope=str(candidate.scope),
+                    secret_persistence=candidate.persistence,
+                    candidate_count=len(candidates),
+                    status="ok_text",
+                )
 
     image_dir = output_dir / f"{pdf_path.stem}_pages"
     if pdftoppm_bin and tesseract_bin:
-        for password, source in attempts:
+        for index, candidate in enumerate(attempts):
             image_dir.mkdir(parents=True, exist_ok=True)
             prefix = image_dir / "page"
-            ok, pdfppm_stderr = pdf_to_images(pdf_path, prefix, password=password)
+            ok, pdfppm_stderr = pdf_to_images(pdf_path, prefix, password=candidate.value)
             if not ok:
                 stderr = pdfppm_stderr or stderr
+                password_failure = password_failure or is_password_error(stderr)
+                if index == 0 and password_failure and not candidates_loaded:
+                    attempts.extend(load_secret_candidates())
                 continue
             texts: list[str] = []
             page_images = sorted(image_dir.glob("page-*.png"))
@@ -264,16 +294,17 @@ def try_extract(pdf_path: Path, output_dir: Path, thread_json: dict, provider_js
                     texts.append(ocr_text)
             if texts:
                 txt_path = write_text_output(output_dir, pdf_path, "\n\n".join(texts))
-                return {
-                    "source_file": str(pdf_path),
-                    "text_txt": str(txt_path),
-                    "method": "pdf_ocr" if not password else "pdf_ocr_password",
-                    "password_source": source,
-                    "password_used": redact_password(password),
-                    "candidate_count": str(len(candidates)),
-                    "status": "ok_ocr",
-                    "notes": "",
-                }
+                return manifest_row(
+                    pdf_path,
+                    text_txt=txt_path,
+                    method="pdf_ocr" if not candidate.value else "pdf_ocr_password",
+                    password_source=candidate.source,
+                    password_used=redact_password(candidate.value),
+                    secret_scope=str(candidate.scope),
+                    secret_persistence=candidate.persistence,
+                    candidate_count=len(candidates),
+                    status="ok_ocr",
+                )
     else:
         if not pdftoppm_bin:
             notes_parts.append("missing=pdftoppm")
@@ -281,23 +312,24 @@ def try_extract(pdf_path: Path, output_dir: Path, thread_json: dict, provider_js
             notes_parts.append("missing=tesseract")
 
     missing_dependency_only = bool(missing_bins) and not pdftotext_bin and (not pdftoppm_bin or not tesseract_bin)
-    if missing_dependency_only:
+    if password_failure and resolver.hint_type(context) and not candidates:
+        status = "needs_password_hint"
+    elif missing_dependency_only:
         status = "missing_dependency"
     elif missing_bins and not (pdftoppm_bin and tesseract_bin):
         status = "missing_dependency"
     else:
         status = "fail"
 
-    return {
-        "source_file": str(pdf_path),
-        "text_txt": "",
-        "method": "",
-        "password_source": "",
-        "password_used": "",
-        "candidate_count": str(len(candidates)),
-        "status": status,
-        "notes": "; ".join(filter(None, [stderr, *notes_parts, "attempted=" + ", ".join(attempted[:12])]))[:2000],
-    }
+    if status == "needs_password_hint":
+        notes_parts.append("next=rerun with --prompt-secrets or set PDF_PASSWORD_CANDIDATES/PDF_BIRTH_DATE")
+
+    return manifest_row(
+        pdf_path,
+        candidate_count=len(candidates),
+        status=status,
+        notes="; ".join(filter(None, [stderr, *notes_parts, "attempted=" + ", ".join(attempted[:12])]))[:2000],
+    )
 
 
 def main() -> int:
@@ -306,23 +338,54 @@ def main() -> int:
     parser.add_argument("output_dir", help="Directory for extracted text outputs")
     parser.add_argument("--thread-json", default="", help="Optional thread context JSON")
     parser.add_argument("--provider-json", default="", help="Optional provider context JSON")
+    parser.add_argument("--prompt-secrets", action="store_true", help="Prompt locally for password/date secrets when needed")
+    parser.add_argument(
+        "--remember-secret",
+        choices=["never", "session", "keychain", "encrypted-file"],
+        default=os.environ.get("PDF_REMEMBER_SECRET", "never"),
+        help="Persistence for secrets entered through --prompt-secrets",
+    )
     args = parser.parse_args()
+    if args.remember_secret not in {"never", "session", "keychain", "encrypted-file"}:
+        parser.error("--remember-secret must be one of: never, session, keychain, encrypted-file")
 
     input_path = Path(args.input_path).expanduser().resolve()
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     thread_json = normalize_thread_json(read_json(Path(args.thread_json).expanduser())) if args.thread_json else {}
     provider_json = read_json(Path(args.provider_json).expanduser()) if args.provider_json else {}
+    resolver = SecretResolver(store=SecretStore())
 
     rows: list[dict[str, str]] = []
     for pdf_path in iter_pdfs(input_path):
-        rows.append(try_extract(pdf_path, output_dir, thread_json, provider_json))
+        rows.append(
+            try_extract(
+                pdf_path,
+                output_dir,
+                thread_json,
+                provider_json,
+                resolver,
+                prompt_secrets=args.prompt_secrets,
+                remember_secret=args.remember_secret,
+            )
+        )
 
     manifest = output_dir / "pdf_text_manifest.tsv"
     with manifest.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.DictWriter(
             fh,
-            fieldnames=["source_file", "text_txt", "method", "password_source", "password_used", "candidate_count", "status", "notes"],
+            fieldnames=[
+                "source_file",
+                "text_txt",
+                "method",
+                "password_source",
+                "password_used",
+                "secret_scope",
+                "secret_persistence",
+                "candidate_count",
+                "status",
+                "notes",
+            ],
             delimiter="\t",
         )
         writer.writeheader()

@@ -8,15 +8,28 @@ if [[ $# -lt 1 ]]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+PYTHON_BIN="${PYTHON_BIN:-$REPO_ROOT/.venv/bin/python}"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="python3"
+fi
+if ! "$PYTHON_BIN" - <<'PY'
+import sys
+if sys.version_info < (3, 11):
+    raise SystemExit(f"python >=3.11 required, got {sys.version.split()[0]}; create .venv or set PYTHON_BIN")
+PY
+then
+  exit 1
+fi
 SKILL_DIR="$REPO_ROOT/skills/gmail-browser-attachments"
-TARGETS_FILE="$(python3 - <<'PY' "$1"
+TARGETS_FILE="$("$PYTHON_BIN" - <<'PY' "$1"
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).expanduser().resolve())
 PY
 )"
 RUN_DIR_INPUT="${2:-$REPO_ROOT/runs/discovery-$(date +%Y%m%d-%H%M%S)}"
-RUN_DIR="$(python3 - <<'PY' "$RUN_DIR_INPUT"
+RUN_DIR="$("$PYTHON_BIN" - <<'PY' "$RUN_DIR_INPUT"
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).expanduser().resolve())
@@ -59,7 +72,7 @@ trap release_lock EXIT INT TERM
 echo -e "line_no\tslug\tdiscovery_status\tdiscovery_class\tattachment_candidate_count\tdownload_url_count\tinline_candidate_count\tscanning_for_viruses\tjson_log\tstderr_log\tquery\tneedle" > "$MANIFEST_TSV"
 
 slugify() {
-  python3 - <<'PY' "$1"
+  "$PYTHON_BIN" - <<'PY' "$1"
 import re
 import sys
 value = sys.argv[1].strip().lower()
@@ -92,7 +105,7 @@ while IFS=$'\t' read -r query needle _mode; do
     row_status="discover_fail"
   fi
 
-  stats="$(python3 - <<'PY' "$json_log" "$row_status"
+  stats="$("$PYTHON_BIN" - <<'PY' "$json_log" "$row_status"
 import json
 import sys
 path, row_status = sys.argv[1], sys.argv[2]

@@ -8,15 +8,28 @@ if [[ $# -lt 1 ]]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+PYTHON_BIN="${PYTHON_BIN:-$REPO_ROOT/.venv/bin/python}"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="python3"
+fi
+if ! "$PYTHON_BIN" - <<'PY'
+import sys
+if sys.version_info < (3, 11):
+    raise SystemExit(f"python >=3.11 required, got {sys.version.split()[0]}; create .venv or set PYTHON_BIN")
+PY
+then
+  exit 1
+fi
 SKILL_DIR="$REPO_ROOT/skills/gmail-browser-attachments"
-TARGETS_FILE="$(python3 - <<'PY' "$1"
+TARGETS_FILE="$("$PYTHON_BIN" - <<'PY' "$1"
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).expanduser().resolve())
 PY
 )"
 RUN_DIR_INPUT="${2:-$REPO_ROOT/runs/portal-run-$(date +%Y%m%d-%H%M%S)}"
-RUN_DIR="$(python3 - <<'PY' "$RUN_DIR_INPUT"
+RUN_DIR="$("$PYTHON_BIN" - <<'PY' "$RUN_DIR_INPUT"
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).expanduser().resolve())
@@ -74,7 +87,7 @@ trap cleanup EXIT INT TERM
 echo -e "line_no\tprovider\tlocator\trow_needle\tpatient_hint\tportal_url\tstatus\tpdf_text_status\tenrichment_status\traw_dir\tpdf_text_manifest\tthread_json\tprovider_json\tstderr_log" > "$MANIFEST_TSV"
 
 port_is_up() {
-  python3 - <<'PY' "$PORT"
+  "$PYTHON_BIN" - <<'PY' "$PORT"
 import sys, urllib.request
 port = sys.argv[1]
 try:
@@ -86,7 +99,7 @@ PY
 }
 
 slugify() {
-  python3 - <<'PY' "$1"
+  "$PYTHON_BIN" - <<'PY' "$1"
 import re, sys
 value = sys.argv[1].strip().lower()
 value = re.sub(r"\s+", "-", value)
@@ -97,7 +110,7 @@ PY
 }
 
 browser_ws_url() {
-  python3 - <<'PY' "$PORT"
+  "$PYTHON_BIN" - <<'PY' "$PORT"
 import json, sys, urllib.request
 port = sys.argv[1]
 with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=3) as resp:
@@ -107,7 +120,7 @@ PY
 }
 
 resolve_page_ws_url() {
-  python3 - <<'PY' "$PORT" "$1"
+  "$PYTHON_BIN" - <<'PY' "$PORT" "$1"
 import json, sys, time, urllib.request
 port, target_id = sys.argv[1], sys.argv[2]
 base = f"http://127.0.0.1:{port}"
@@ -124,7 +137,7 @@ PY
 }
 
 resolve_gmail_page_ws_url() {
-  python3 - <<'PY' "$PORT"
+  "$PYTHON_BIN" - <<'PY' "$PORT"
 import json, sys, time, urllib.request
 port = sys.argv[1]
 base = f"http://127.0.0.1:{port}"
@@ -141,7 +154,7 @@ PY
 }
 
 summarize_pdf_text_manifest_status() {
-  python3 - <<'PY' "$1"
+  "$PYTHON_BIN" - <<'PY' "$1"
 import csv
 import sys
 from pathlib import Path
@@ -158,19 +171,28 @@ statuses = {row.get("status", "") for row in rows}
 ok_statuses = {"ok_text", "ok_ocr"}
 if statuses and statuses <= ok_statuses:
     print("ok")
+elif "needs_password_hint" in statuses and statuses <= (ok_statuses | {"needs_password_hint"}):
+    print("partial" if statuses & ok_statuses else "needs_password_hint")
 elif "missing_dependency" in statuses and statuses <= (ok_statuses | {"missing_dependency"}):
     print("partial" if statuses & ok_statuses else "missing_dependency")
 elif "fail" in statuses and statuses <= (ok_statuses | {"fail"}):
     print("partial" if statuses & ok_statuses else "fail")
-elif "missing_dependency" in statuses or "fail" in statuses:
-    print("partial" if statuses & ok_statuses else ("missing_dependency" if "missing_dependency" in statuses and "fail" not in statuses else "fail"))
+elif "needs_password_hint" in statuses or "missing_dependency" in statuses or "fail" in statuses:
+    if statuses & ok_statuses:
+        print("partial")
+    elif "fail" in statuses:
+        print("fail")
+    elif "needs_password_hint" in statuses:
+        print("needs_password_hint")
+    else:
+        print("missing_dependency")
 else:
     print("unknown")
 PY
 }
 
 combine_enrichment_status() {
-  python3 - <<'PY' "$1" "$2"
+  "$PYTHON_BIN" - <<'PY' "$1" "$2"
 import sys
 
 row_status, pdf_status = sys.argv[1:3]
@@ -179,7 +201,7 @@ if row_status != "ok":
     raise SystemExit(0)
 if pdf_status == "not_applicable":
     print("not_applicable")
-elif pdf_status in {"ok", "missing_dependency", "fail", "partial", "unknown"}:
+elif pdf_status in {"ok", "missing_dependency", "needs_password_hint", "fail", "partial", "unknown"}:
     print(pdf_status)
 else:
     print("unknown")
@@ -187,7 +209,7 @@ PY
 }
 
 has_missing_patient_hint() {
-  python3 - <<'PY' "$TARGETS_FILE"
+  "$PYTHON_BIN" - <<'PY' "$TARGETS_FILE"
 import csv
 import sys
 from pathlib import Path
@@ -301,7 +323,7 @@ while IFS=$'\t' read -r provider locator row_needle patient_hint; do
   fi
 
   if [[ "$row_status" == "ok" ]]; then
-    portal_url="$(python3 - <<'PY' "$thread_json" "$provider"
+    portal_url="$("$PYTHON_BIN" - <<'PY' "$thread_json" "$provider"
 import json, sys
 from urllib.parse import urlparse, parse_qs
 path, provider = sys.argv[1], sys.argv[2].lower()
@@ -324,7 +346,7 @@ PY
   fi
 
   if [[ "$row_status" == "ok" && -z "${patient_hint:-}" ]]; then
-    patient_hint="$(python3 - <<'PY' "$thread_json" "$provider"
+    patient_hint="$("$PYTHON_BIN" - <<'PY' "$thread_json" "$provider"
 import json, re, sys
 from urllib.parse import unquote
 path, provider = sys.argv[1], sys.argv[2].lower()
@@ -348,7 +370,7 @@ PY
 
   if [[ "$row_status" == "ok" ]]; then
     target_json="$(node "$SKILL_DIR/scripts/chrome_cdp_create_target.mjs" "$BROWSER_WS_URL" "$portal_url" 2>>"$stderr_log" || true)"
-    target_id="$(printf '%s' "$target_json" | python3 -c 'import json,sys; text=sys.stdin.read().strip(); print(json.loads(text)["targetId"]) if text else None' 2>/dev/null || true)"
+    target_id="$(printf '%s' "$target_json" | "$PYTHON_BIN" -c 'import json,sys; text=sys.stdin.read().strip(); print(json.loads(text)["targetId"]) if text else None' 2>/dev/null || true)"
     portal_ws_url=""
     if [[ -n "$target_id" ]]; then
       portal_ws_url="$(resolve_page_ws_url "$target_id" || true)"
@@ -366,7 +388,7 @@ PY
           close_target "$target_id" "$stderr_log"
           target_id=""
           retry_target_json="$(node "$SKILL_DIR/scripts/chrome_cdp_create_target.mjs" "$BROWSER_WS_URL" "$portal_url" 2>>"$stderr_log" || true)"
-          retry_target_id="$(printf '%s' "$retry_target_json" | python3 -c 'import json,sys; text=sys.stdin.read().strip(); print(json.loads(text)["targetId"]) if text else None' 2>/dev/null || true)"
+          retry_target_id="$(printf '%s' "$retry_target_json" | "$PYTHON_BIN" -c 'import json,sys; text=sys.stdin.read().strip(); print(json.loads(text)["targetId"]) if text else None' 2>/dev/null || true)"
           retry_portal_ws_url=""
           if [[ -n "$retry_target_id" ]]; then
             retry_portal_ws_url="$(resolve_page_ws_url "$retry_target_id" || true)"
@@ -384,7 +406,7 @@ PY
   fi
 
   if [[ "$row_status" == "ok" ]]; then
-    python3 "$REPO_ROOT/scripts/extract_pdf_text.py" "$target_raw" "$target_pdf_text" --thread-json "$thread_json" --provider-json "$provider_json" >"$LOG_DIR/$slug.pdf_text.stdout.log" 2>"$LOG_DIR/$slug.pdf_text.stderr.log" || true
+    "$PYTHON_BIN" "$REPO_ROOT/scripts/extract_pdf_text.py" "$target_raw" "$target_pdf_text" --thread-json "$thread_json" --provider-json "$provider_json" >"$LOG_DIR/$slug.pdf_text.stdout.log" 2>"$LOG_DIR/$slug.pdf_text.stderr.log" || true
   fi
   if [[ ! -f "$pdf_text_manifest" ]]; then
     pdf_text_manifest="-"
@@ -401,6 +423,6 @@ PY
   close_target "$retry_target_id" "$stderr_log"
 done < "$TARGETS_FILE"
 
-python3 "$REPO_ROOT/scripts/derive_asset_metadata.py" "$RUN_DIR" >"$LOG_DIR/asset_metadata.stdout.log" 2>"$LOG_DIR/asset_metadata.stderr.log" || true
+"$PYTHON_BIN" "$REPO_ROOT/scripts/derive_asset_metadata.py" "$RUN_DIR" >"$LOG_DIR/asset_metadata.stdout.log" 2>"$LOG_DIR/asset_metadata.stderr.log" || true
 
 echo "$RUN_DIR"

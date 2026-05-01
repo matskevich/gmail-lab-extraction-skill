@@ -14,6 +14,7 @@ this file tracks what is still missing before the repo can honestly be described
 - browser/cdp extraction for gmail inline image assets
 - OCR lane for image assets
 - password-hinted PDF text extraction
+- Codex/Claude agent skill packaging for the main workflow
 - claims layer for `analysis_date`, `owner`, `sample_draw_*`
 - manifests for discovery, evidence, claims, analyses
 - live smoke corpus with correct thread routing on real mailbox cases
@@ -38,9 +39,8 @@ missing corpus classes to keep locally in `tmp/private_regression_targets.tsv`:
 a new agent/operator should not need repo folklore to do the first useful run.
 
 still missing:
-- one obvious first-run path with the minimum setup ritual
 - one small private target template beyond the sanitized examples
-- one explicit explanation of how to read `run_manifest.tsv`, `asset_manifest.tsv`, and `regression_summary.tsv` together
+- more examples that teach friends/operators to read `run_manifest.tsv`, `asset_manifest.tsv`, and `regression_summary.tsv` before trusting `final/`
 
 ### 3. api-native lane
 

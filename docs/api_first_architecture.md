@@ -106,13 +106,16 @@ important rule:
 responsibility:
 - OCR images
 - extract PDF text
-- infer password candidates from provider/thread hints
+- infer password hints from provider/thread context
+- resolve password candidates through a local secret-resolution layer
 - derive date / owner / provider claims
 
 important rule:
 - enrichment produces claims
 - acquisition produces evidence
 - do not merge them
+- password hints are evidence; password values are local secrets
+- see `docs/secret_resolution.md`
 
 ## 7. promotion layer
 

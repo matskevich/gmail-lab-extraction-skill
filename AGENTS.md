@@ -9,12 +9,13 @@ purpose:
 read this first if you are a new agent:
 1. `START_HERE_FOR_AGENTS.md`
 2. `README.md`
-3. `docs/api_first_architecture.md`
-4. `docs/architecture.md`
-5. `docs/completeness_framework.md`
-6. `docs/test_strategy.md`
-7. `docs/goals_review.md`
-8. `schemas/*.schema.json`
+3. `docs/agent_install.md`
+4. `docs/api_first_architecture.md`
+5. `docs/architecture.md`
+6. `docs/completeness_framework.md`
+7. `docs/test_strategy.md`
+8. `docs/goals_review.md`
+9. `schemas/*.schema.json`
 
 current truth:
 - gmail native attachments: working
@@ -48,6 +49,11 @@ non-goals:
 - this repo should not mutate mailbox state by default
 
 repo entrypoints:
+- agent packaging:
+  - `skills/gmail-lab-export`
+  - `skills/gmail-browser-attachments`
+  - `.claude/skills/gmail-lab-export`
+  - `docs/agent_install.md`
 - `./scripts/doctor.sh`
 - `./scripts/run_gmail_discovery.sh ./examples/targets.tsv`
 - `./scripts/run_gmail_lab_export.sh ./examples/targets.tsv`

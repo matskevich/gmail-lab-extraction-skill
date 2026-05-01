@@ -105,6 +105,9 @@ portal operator-hint rule:
 - `missing_dependency`
   - environment problem in OCR/PDF-text lane
 
+- `needs_password_hint`
+  - encrypted PDF has a password rule/hint, but the non-interactive run had no local secret candidate
+
 - `pass`
   - minimum expected raw assets landed
 
