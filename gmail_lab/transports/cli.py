@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
+import urllib.error
+import urllib.request
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,6 +16,12 @@ import click
 from gmail_lab import __version__
 from gmail_lab.core.claims.derive import build_claim_record, claim_to_analysis_row
 from gmail_lab.core.config import load_config, resolve_root, save_config
+from gmail_lab.core.google_auth import (
+    build_gmail_service,
+    default_token_path,
+    google_credentials_status,
+    load_google_credentials,
+)
 from gmail_lab.core.layout import AppPaths
 from gmail_lab.core.manifests.analyses import write_analysis_manifest
 from gmail_lab.core.manifests.claims import write_claims_manifest
@@ -86,6 +97,202 @@ def identity_status_command(ctx: click.Context) -> None:
             indent=2,
         )
     )
+
+
+@main.command("auth-google")
+@click.option("--client-secrets", type=click.Path(exists=True, path_type=Path), default=None)
+@click.option("--token", type=click.Path(path_type=Path), default=None)
+@click.option("--no-browser", is_flag=True, help="Print OAuth URL and ask for an authorization code.")
+@click.pass_context
+def auth_google_command(
+    ctx: click.Context,
+    client_secrets: Path | None,
+    token: Path | None,
+    no_browser: bool,
+) -> None:
+    paths = _paths_from_context(ctx)
+    paths.ensure()
+    client_secrets_path = client_secrets
+    if client_secrets_path is None:
+        env_value = os.environ.get("GMAIL_LAB_GOOGLE_CLIENT_SECRET", "").strip()
+        client_secrets_path = Path(env_value).expanduser().resolve() if env_value else None
+    token_path = token.expanduser().resolve() if token else default_token_path(paths.root)
+    try:
+        creds = load_google_credentials(
+            token_path=token_path,
+            client_secrets_path=client_secrets_path,
+            no_browser=no_browser,
+        )
+        profile = build_gmail_service(creds).users().getProfile(userId="me").execute()
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(
+        json.dumps(
+            {
+                "token_path": str(token_path),
+                "gmail_address": profile.get("emailAddress", ""),
+                "messages_total": profile.get("messagesTotal", ""),
+                "threads_total": profile.get("threadsTotal", ""),
+                "scopes": ["gmail.readonly"],
+                "valid": True,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@main.command("google-auth-status")
+@click.option("--token", type=click.Path(path_type=Path), default=None)
+@click.pass_context
+def google_auth_status_command(ctx: click.Context, token: Path | None) -> None:
+    paths = _paths_from_context(ctx)
+    token_path = token.expanduser().resolve() if token else default_token_path(paths.root)
+    click.echo(json.dumps(google_credentials_status(token_path), ensure_ascii=False, indent=2))
+
+
+def _cdp_json(url: str, timeout: float = 1.0) -> dict[str, object]:
+    with urllib.request.urlopen(url, timeout=timeout) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    if isinstance(data, dict):
+        return data
+    return {}
+
+
+def _tail_text(value: str, limit: int = 1600) -> str:
+    text = value.strip()
+    if len(text) <= limit:
+        return text
+    return text[-limit:]
+
+
+def _diagnose_cdp(port: int, run_smoke: bool) -> dict[str, object]:
+    base_url = f"http://127.0.0.1:{port}"
+    status: dict[str, object] = {
+        "port": port,
+        "up": False,
+        "authenticated_gmail": False,
+        "state": "cdp_down",
+    }
+    try:
+        version = _cdp_json(f"{base_url}/json/version")
+    except (OSError, urllib.error.URLError, TimeoutError) as exc:
+        status["error"] = str(exc)
+        return status
+    status["up"] = True
+    status["state"] = "cdp_up_unknown_auth"
+    status["browser"] = version.get("Browser", "")
+
+    if not run_smoke:
+        return status
+
+    repo_root = Path(__file__).resolve().parents[2]
+    smoke_script = repo_root / "skills/gmail-browser-attachments/scripts/gmail_smoke_check.sh"
+    if not smoke_script.exists():
+        status["state"] = "cdp_smoke_missing"
+        status["error"] = f"missing smoke script: {smoke_script}"
+        return status
+    try:
+        proc = subprocess.run(
+            [str(smoke_script), str(port)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=25,
+        )
+    except subprocess.TimeoutExpired as exc:
+        status["state"] = "cdp_smoke_timeout"
+        status["error"] = str(exc)
+        return status
+
+    combined = "\n".join(part for part in (proc.stdout, proc.stderr) if part)
+    status["smoke_exit_code"] = proc.returncode
+    status["smoke_excerpt"] = _tail_text(combined)
+    if proc.returncode == 0:
+        status["authenticated_gmail"] = True
+        status["state"] = "cdp_authenticated_gmail"
+    elif "gmail_not_authenticated" in combined:
+        status["state"] = "cdp_gmail_not_authenticated"
+    else:
+        status["state"] = "cdp_smoke_failed"
+    return status
+
+
+@main.command("diagnose-gmail-acquisition")
+@click.option("--token", type=click.Path(path_type=Path), default=None)
+@click.option("--port", type=int, default=9222)
+@click.option("--skip-cdp-smoke", is_flag=True, help="Only check that the CDP port is reachable.")
+@click.pass_context
+def diagnose_gmail_acquisition_command(
+    ctx: click.Context,
+    token: Path | None,
+    port: int,
+    skip_cdp_smoke: bool,
+) -> None:
+    """Report whether Gmail raw-byte acquisition can run on this machine."""
+
+    paths = _paths_from_context(ctx)
+    token_path = token.expanduser().resolve() if token else default_token_path(paths.root)
+    api_status = google_credentials_status(token_path)
+    cdp_status = _diagnose_cdp(port, run_smoke=not skip_cdp_smoke)
+    api_ready = bool(api_status.get("valid"))
+    cdp_ready = bool(cdp_status.get("authenticated_gmail"))
+    recommendations: list[str] = []
+    if api_ready:
+        recommendations.append("run `gmail-lab export-gmail-api` for Gmail-native attachments")
+    else:
+        recommendations.append("run `gmail-lab auth-google --client-secrets <oauth-desktop-client.json>`")
+    if cdp_ready:
+        recommendations.append("browser/CDP fallback is available for UI-specific rescue")
+    elif cdp_status.get("state") == "cdp_gmail_not_authenticated":
+        recommendations.append("repair CDP auth by using a persistent CDP profile and logging into Gmail once")
+    else:
+        recommendations.append("start a persistent CDP profile only if browser fallback is needed")
+
+    click.echo(
+        json.dumps(
+            {
+                "ready": api_ready or cdp_ready,
+                "preferred_lane": "gmail_api" if api_ready else "auth_google",
+                "gmail_api": api_status,
+                "browser_cdp": cdp_status,
+                "recommendations": recommendations,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
+@main.command("export-gmail-api")
+@click.argument("targets_tsv", type=click.Path(exists=True, path_type=Path))
+@click.argument("run_dir", type=click.Path(path_type=Path), required=False)
+@click.option("--token", type=click.Path(path_type=Path), default=None)
+@click.option("--client-secrets", type=click.Path(exists=True, path_type=Path), default=None)
+@click.option("--no-browser", is_flag=True)
+@click.option("--max-results", type=int, default=10)
+def export_gmail_api_command(
+    targets_tsv: Path,
+    run_dir: Path | None,
+    token: Path | None,
+    client_secrets: Path | None,
+    no_browser: bool,
+    max_results: int,
+) -> None:
+    script = Path(__file__).resolve().parents[2] / "scripts" / "run_gmail_api_export.py"
+    args = [sys.executable, str(script), str(targets_tsv)]
+    if run_dir is not None:
+        args.append(str(run_dir))
+    if token is not None:
+        args.extend(["--token", str(token)])
+    if client_secrets is not None:
+        args.extend(["--client-secrets", str(client_secrets)])
+    if no_browser:
+        args.append("--no-browser")
+    args.extend(["--max-results", str(max_results)])
+    proc = subprocess.run(args, check=False, text=True)
+    if proc.returncode != 0:
+        raise click.ClickException(f"gmail api export failed with exit code {proc.returncode}")
 
 
 @main.command("record-mailbox")

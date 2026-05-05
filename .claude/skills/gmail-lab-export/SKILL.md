@@ -25,6 +25,7 @@ From repo root:
 ```bash
 ./scripts/doctor.sh
 python -m gmail_lab --help
+gmail-lab diagnose-gmail-acquisition
 ```
 
 For real mailbox runs, keep targets in a gitignored file such as `tmp/private_targets.tsv`.
@@ -32,7 +33,9 @@ For real mailbox runs, keep targets in a gitignored file such as `tmp/private_ta
 ## Decision Router
 
 - "find likely lab emails" -> run discovery first; inspect `discovery_manifest.tsv`.
-- "download/export results" -> run `./scripts/run_gmail_lab_export.sh <targets.tsv> <run-dir>`.
+- "download/export results" -> prefer `gmail-lab export-gmail-api <targets.tsv> <run-dir>` when OAuth/token is available; use `./scripts/run_gmail_lab_export.sh <targets.tsv> <run-dir>` as browser fallback.
+- "Gmail URL" -> do not treat `mail.google.com/.../#inbox/FMfc...` as an API id; ask for/search by sender/date/filename, or use `message:<api_id>` / `thread:<api_id>` if the real Gmail API id is known.
+- "`gmail_not_authenticated`" -> browser/CDP did not reach an authenticated Gmail mailbox; use Gmail API, or start a persistent CDP profile and log into Gmail once.
 - "why is final empty/wrong" -> inspect `asset_manifest.tsv`; `final/` is a convenience view.
 - "OCR or PDF text failed" -> inspect `ocr_status`, `pdf_text_status`, and `enrichment_status`, then rerun `./scripts/rerun_enrichment.py <run-dir>` after installing missing tools.
 - "passworded PDF" -> use local secret resolution; email/provider text is a hint, password values are local secrets.

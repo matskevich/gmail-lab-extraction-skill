@@ -6,7 +6,7 @@
   "columns": [
     { "name": "line_no", "type": "integer", "required": true },
     { "name": "slug", "type": "string", "required": true },
-    { "name": "mode", "type": "string", "required": true, "enum": ["auto", "inline"] },
+    { "name": "mode", "type": "string", "required": true, "enum": ["auto", "inline", "api"] },
     { "name": "status", "type": "string", "required": true, "enum": ["ok", "extract_fail"] },
     { "name": "extracted_count", "type": "integer", "required": true },
     { "name": "ocr_status", "type": "string", "required": true, "enum": ["ok", "not_applicable", "missing_dependency", "fail", "partial", "unknown"] },

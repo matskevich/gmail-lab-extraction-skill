@@ -6,6 +6,8 @@ agent handoff docs:
 - `START_HERE_FOR_AGENTS.md`
 - `AGENTS.md`
 - `docs/agent_install.md`
+- `docs/google_api_setup.md`
+- `docs/acquisition_auth_router.md`
 - `docs/api_first_architecture.md`
 - `docs/self_hosted_product.md`
 - `docs/architecture.md`
@@ -18,7 +20,8 @@ agent handoff docs:
 - `schemas/*.schema.json`
 
 what it does:
-- extracts native gmail attachments via cdp
+- extracts native gmail attachments through Gmail API when OAuth is available
+- extracts native gmail attachments via persistent cdp/browser fallback when API auth is unavailable or UI behavior must be debugged
 - extracts gmail inline image assets rendered through `view=fimg` / `attid`
 - follows tokenized portal links from gmail for supported providers
 - runs ocr over extracted image assets
@@ -38,7 +41,7 @@ python substrate status:
   - evidence archive
   - discovery/evidence/claims/analysis manifests
   - ownership + sample-draw claim derivation
-- this is the foundation for the future `gmail api first` lane; current live extraction still happens through the legacy scripts
+- `scripts/run_gmail_api_export.py` is the first Gmail API acquisition lane for native attachments; browser/CDP remains the fallback/debug lane
 
 what it does not do:
 - external site login automation
@@ -56,7 +59,7 @@ product direction:
 - product boundary: self-hosted, local-first, agent-first, operator-controlled
 - production should be `gmail api first`
 - browser/cdp should remain a fallback and debugging lane
-- see `docs/self_hosted_product.md`, `docs/agent_first_roadmap.md`, and `docs/api_first_architecture.md`
+- see `docs/self_hosted_product.md`, `docs/agent_first_roadmap.md`, `docs/api_first_architecture.md`, and `docs/acquisition_auth_router.md`
 
 completeness rule:
 - historical recovery has two separate goals:
@@ -126,6 +129,18 @@ run a discovery-only pass before raw acquisition:
 ./scripts/run_gmail_discovery.sh ./examples/targets.tsv
 ```
 
+run Gmail API-native attachment acquisition when OAuth is available:
+
+```bash
+gmail-lab diagnose-gmail-acquisition
+gmail-lab auth-google --client-secrets /path/to/oauth-client.json
+gmail-lab export-gmail-api ./tmp/my_targets.tsv ./runs/my-api-run
+```
+
+after the first OAuth run, the local token is reused from `~/.gmail-lab/tokens/gmail-api-token.json` unless `--token` or `GMAIL_LAB_GOOGLE_TOKEN` points elsewhere. this lane uses `gmail.readonly`, writes raw attachments into `raw/`, then runs the existing PDF text/password lane.
+
+For OAuth setup and target locator rules, read [docs/google_api_setup.md](docs/google_api_setup.md).
+
 expected OCR/PDF helpers:
 - `tesseract` for image-heavy email assets and OCR fallback
 - `pdftotext` for text-first PDF extraction
@@ -142,7 +157,7 @@ brew install tesseract poppler
 for a new agent/operator pair, the shortest honest path is:
 
 1. prepare a small target file, for example `./tmp/my_targets.tsv`
-2. start the chrome cdp clone by running the export script or the bundled skill helper
+2. run `gmail-lab diagnose-gmail-acquisition`
 3. run one logged export into a local run directory
 4. inspect the manifests before trusting the final filenames
 
@@ -151,8 +166,23 @@ minimal path:
 ```bash
 mkdir -p ./tmp
 cp ./examples/targets.tsv ./tmp/my_targets.tsv
+gmail-lab auth-google --client-secrets /path/to/oauth-client.json
+gmail-lab export-gmail-api ./tmp/my_targets.tsv ./runs/my-api-run
+```
+
+legacy browser fallback path:
+
+```bash
 ./scripts/run_gmail_lab_export.sh ./tmp/my_targets.tsv ./runs/my-first-run
 ```
+
+if the run fails with `gmail_not_authenticated`, the Chrome clone reached a sign-in page instead of a mailbox. choose the logged-in Chrome profile and refresh the clone:
+
+```bash
+skills/gmail-browser-attachments/scripts/start_chrome_cdp_profile.sh
+```
+
+Log into Gmail in that persistent CDP profile once, then rerun the browser fallback. This is an acquisition blocker, not a PDF parsing result. after raw PDFs land in `raw/`, passworded text extraction is handled by the local secret-resolution lane and may return `needs_password_hint`.
 
 after the run, inspect:
 - `./runs/my-first-run/run_manifest.tsv`
@@ -272,7 +302,7 @@ current portal support:
 - `invitro`
   - opens gmail thread by direct gmail id or locator
   - extracts anonymized invitro result link from the email body
-  - opens provider page in the chrome clone
+  - opens provider page in the CDP browser profile
   - clicks `Download`
   - captures the real pdf endpoint and saves the pdf locally
 
@@ -391,7 +421,11 @@ privacy rule:
 ## skill use
 
 ```bash
-"$HOME/.codex/skills/gmail-browser-attachments/scripts/start_chrome_cdp_clone.sh"
+gmail-lab diagnose-gmail-acquisition
+```
+
+```bash
+"$HOME/.codex/skills/gmail-browser-attachments/scripts/start_chrome_cdp_profile.sh"
 ```
 
 ```bash
@@ -401,6 +435,8 @@ WS_URL="$("$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_find_page
 ```bash
 "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_smoke_check.sh" 9222
 ```
+
+the smoke check now fails fast if CDP is on a Gmail sign-in/auth page. use Gmail API for native attachments, or log into the persistent CDP profile before running collectors.
 
 ```bash
 node "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_collect_attachments_from_query.mjs" \

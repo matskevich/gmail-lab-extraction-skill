@@ -17,7 +17,7 @@ use this skill when:
 do not depend on AppleScript JS injection or the normal Chrome download manager.
 
 instead:
-1. launch a cloned Chrome profile with `--remote-debugging-port`
+1. launch a persistent CDP Chrome profile, or a cloned Chrome profile when cloning is known to preserve auth
 2. connect to the Gmail page through Chrome DevTools Protocol
 3. read `download_url` or Gmail inline asset URLs in page context
 4. call `fetch(..., { credentials: 'include' })`
@@ -41,18 +41,31 @@ not covered:
 
 ## quick start
 
-1. start a cloned Chrome profile in a separate shell:
+1. diagnose the available acquisition lanes:
+
+```bash
+gmail-lab diagnose-gmail-acquisition
+```
+
+2. preferred browser fallback: start a persistent CDP profile in a separate shell and log into Gmail once:
+```bash
+"$HOME/.codex/skills/gmail-browser-attachments/scripts/start_chrome_cdp_profile.sh"
+```
+
+This profile lives under `~/.gmail-lab/chrome-cdp-profile` by default. It avoids copying an active Chrome profile whose Gmail credentials may be rejected by Google after cloning.
+
+3. legacy rescue path: start a cloned Chrome profile:
 ```bash
 "$HOME/.codex/skills/gmail-browser-attachments/scripts/start_chrome_cdp_clone.sh"
 ```
 
-2. find the Gmail page websocket:
+4. find the Gmail page websocket:
 ```bash
 WS_URL="$("$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_find_page_ws_url.sh" 9222)"
 echo "$WS_URL"
 ```
 
-3. run a sanity check:
+5. run a sanity check:
 ```bash
 node "$HOME/.codex/skills/gmail-browser-attachments/scripts/chrome_cdp_eval.mjs" \
   "$WS_URL" \
@@ -64,7 +77,12 @@ or use the one-shot check:
 "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_smoke_check.sh" 9222
 ```
 
-4. fetch one attachment by needle:
+if the smoke check reports `gmail_not_authenticated`, the CDP page is not an authenticated Gmail mailbox. use Gmail API for native attachments, or use the persistent CDP profile and log into Gmail once:
+```bash
+"$HOME/.codex/skills/gmail-browser-attachments/scripts/start_chrome_cdp_profile.sh"
+```
+
+6. fetch one attachment by needle:
 ```bash
 node "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_fetch_attachment_via_cdp.mjs" \
   "$WS_URL" \
@@ -72,7 +90,7 @@ node "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_fetch_attachme
   ./downloads
 ```
 
-5. collect native attachments and inline assets from a query:
+7. collect native attachments and inline assets from a query:
 ```bash
 node "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_collect_attachments_from_query.mjs" \
   "$WS_URL" \
@@ -81,7 +99,7 @@ node "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_collect_attach
   ./downloads
 ```
 
-6. collect only inline images:
+8. collect only inline images:
 ```bash
 node "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_collect_inline_assets_from_query.mjs" \
   "$WS_URL" \
@@ -90,7 +108,7 @@ node "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_collect_inline
   ./downloads
 ```
 
-7. OCR image assets:
+9. OCR image assets:
 ```bash
 python3 "$HOME/.codex/skills/gmail-browser-attachments/scripts/ocr_image_assets.py" \
   ./downloads \
@@ -105,7 +123,7 @@ dependency note:
 brew install tesseract poppler
 ```
 
-8. if a PDF is password-protected, pass hints to the repo runner or the text extractor:
+10. if a PDF is password-protected, pass hints to the repo runner or the text extractor:
 ```bash
 python3 ./scripts/extract_pdf_text.py ./downloads ./pdf_text \
   --prompt-secrets \
@@ -145,16 +163,19 @@ run:
 
 ## workflow rules
 
-- prefer a cloned profile; Chrome blocks remote debugging on the default data dir
+- prefer Gmail API for Gmail-native attachments
+- prefer a persistent CDP profile for browser fallback; Chrome blocks remote debugging on the default data dir, and active-profile clones can lose Gmail auth
+- use a cloned profile only when it has already proven authenticated on that machine
 - keep the clone read-only from the mailbox perspective unless the user explicitly asks for mutation
 - write downloads into a caller-provided folder first; taxonomy or promotion happens later
 - if you need a different Chrome profile, set `PROFILE_DIR=Profile 1` before `start_chrome_cdp_clone.sh`
 - if login state in the clone is stale, rerun with `REFRESH_PROFILE=1`
+- if the clone opens sign-in, treat acquisition as blocked; do not ask the user for result interpretation from screenshots until raw bytes are either recovered or the blocker is recorded in the manifest
 
 ## failure modes
 
 - `DevTools remote debugging requires a non-default data directory`
-  use `start_chrome_cdp_clone.sh`
+  use `start_chrome_cdp_profile.sh` or `start_chrome_cdp_clone.sh`
 
 - `no attachments found for row`
   first hypothesis: Gmail hydrated the thread slowly
@@ -178,13 +199,22 @@ run:
 - Gmail page websocket not found
   confirm the cloned Chrome is still running and `mail.google.com` is open
 
+- `gmail_not_authenticated`
+  the CDP page is not an authenticated Gmail mailbox. first hypothesis: the wrong Chrome profile was cloned. second hypothesis: the clone is stale. third hypothesis: Chrome login cookies did not survive cloning. use `gmail-lab diagnose-gmail-acquisition`; prefer Gmail API for native attachments, or start `start_chrome_cdp_profile.sh` and log into Gmail once for browser fallback.
+
 ## scripts
 
 - `scripts/start_chrome_cdp_clone.sh`
   clone a local Chrome profile into `/tmp` and launch Chrome with CDP enabled
 
+- `scripts/start_chrome_cdp_profile.sh`
+  launch a persistent CDP-only Chrome profile under `~/.gmail-lab/chrome-cdp-profile`; use this when profile cloning opens a Gmail sign-in/auth gate
+
 - `scripts/gmail_find_page_ws_url.sh`
   return the first Gmail page websocket from the local CDP endpoint
+
+- `scripts/gmail_assert_authenticated.mjs`
+  fail fast when the resolved Gmail page is actually a sign-in/auth gate instead of an authenticated mailbox
 
 - `scripts/chrome_cdp_eval.mjs`
   evaluate arbitrary JS on a page websocket

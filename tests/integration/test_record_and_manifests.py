@@ -155,6 +155,44 @@ def test_record_message_and_emit_manifests(tmp_path) -> None:
     assert evidence_rows[0]["original_filename"] == "report.pdf"
 
 
+def test_google_auth_status_reports_missing_token(tmp_path) -> None:
+    root = tmp_path / ".gmail-lab"
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["--root", str(root), "google-auth-status"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["exists"] is False
+    assert payload["valid"] is False
+    assert payload["token_path"].endswith("tokens/gmail-api-token.json")
+
+
+def test_export_gmail_api_command_is_available() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["export-gmail-api", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "TARGETS_TSV" in result.output
+    assert "--client-secrets" in result.output
+
+
+def test_diagnose_gmail_acquisition_reports_missing_auth_and_cdp_down(tmp_path) -> None:
+    root = tmp_path / ".gmail-lab"
+    runner = CliRunner()
+
+    result = runner.invoke(main, ["--root", str(root), "diagnose-gmail-acquisition", "--port", "9"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["ready"] is False
+    assert payload["preferred_lane"] == "auth_google"
+    assert payload["gmail_api"]["valid"] is False
+    assert payload["browser_cdp"]["state"] == "cdp_down"
+    assert "auth-google" in "\n".join(payload["recommendations"])
+
+
 def test_derive_claims_and_emit_manifests(tmp_path) -> None:
     root = tmp_path / ".gmail-lab"
     runner = CliRunner()

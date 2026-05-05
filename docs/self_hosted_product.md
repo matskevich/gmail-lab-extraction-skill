@@ -63,7 +63,7 @@ for the human operator:
 
 - `agent-first self-hosted gmail lab export toolkit`
 - `local-first evidence capture + metadata derivation`
-- `browser/cdp live extraction today, gmail api first later`
+- `gmail api native extraction first, browser/cdp fallback for rescue and UI-specific assets`
 
 ## release bar for open-source usefulness
 

@@ -46,15 +46,18 @@ Read in this order:
 2. `AGENTS.md`
 3. `README.md`
 4. `docs/architecture.md`
-5. `docs/test_strategy.md`
-6. `docs/secret_resolution.md`
-7. `schemas/*.schema.json`
+5. `docs/google_api_setup.md`
+6. `docs/acquisition_auth_router.md`
+7. `docs/test_strategy.md`
+8. `docs/secret_resolution.md`
+9. `schemas/*.schema.json`
 
 Then run:
 
 ```bash
 ./scripts/doctor.sh
 python -m gmail_lab --help
+gmail-lab diagnose-gmail-acquisition
 ```
 
 ## Packaging Rule

@@ -10,7 +10,8 @@ this file tracks what is still missing before the repo can honestly be described
 
 ## what is already green
 
-- browser/cdp extraction for gmail-native attachments
+- gmail api extraction for gmail-native attachments
+- browser/cdp fallback for gmail-native attachment rescue
 - browser/cdp extraction for gmail inline image assets
 - OCR lane for image assets
 - password-hinted PDF text extraction

@@ -13,7 +13,7 @@ run on every code change:
 goal:
 - syntax ok
 - required local binaries visible
-- chrome cdp lane reachable when a live session is expected
+- `gmail-lab diagnose-gmail-acquisition` reports whether Gmail API or browser/CDP acquisition is currently available
 
 ## layer 2: live regression corpus
 

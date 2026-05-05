@@ -9,6 +9,7 @@ the repo has 5 layers:
 - distinguish `candidate_attachment`, `candidate_inline_only`, `candidate_portal_only`, `candidate_context_only`
 
 2. extraction
+- gmail api runner fetches native attachment bytes from mailbox MIME state
 - gmail collectors fetch bytes from gmail page context via cdp
 - portal runners open a provider result page and fetch bytes there
 
@@ -27,11 +28,13 @@ the repo has 5 layers:
 ## modules
 
 ### gmail extraction
+- `scripts/run_gmail_api_export.py`
 - `skills/gmail-browser-attachments/scripts/gmail_collect_attachments_from_query.mjs`
 - `skills/gmail-browser-attachments/scripts/gmail_collect_inline_assets_from_query.mjs`
 
 responsibility:
-- search gmail
+- search gmail through API or browser fallback
+- traverse MIME parts and fetch `attachmentId` bytes when API OAuth is available
 - open the matching thread
 - warm the thread so below-the-fold attachment controls can hydrate before asset collection
 - fetch visible assets with page-context credentials
@@ -45,6 +48,11 @@ must not do:
 - ownership truth claims
 - file classification into medical taxonomy
 - provider-specific portal logic
+
+preferred lane:
+- use `scripts/run_gmail_api_export.py` for gmail-native attachments when OAuth/token is available
+- use persistent browser/CDP for inline Gmail UI assets, auth-broken rescue, and regression/debugging
+- run `gmail-lab diagnose-gmail-acquisition` before treating a live mailbox run as available
 
 ### portal extraction
 - `scripts/run_portal_lab_export.sh`

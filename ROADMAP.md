@@ -2,11 +2,11 @@
 
 ## current public label
 
-`browser-first self-hosted alpha`
+`browser-first self-hosted alpha`, moving to `api-first beta`
 
 this means:
 
-- local operator runs the tool against their own Gmail session
+- local operator can run the browser lane today and the Gmail API lane where OAuth is configured
 - accessible gmail attachments, inline images, password-hinted PDFs, and supported tokenized portal links can be captured
 - raw evidence and agent-readable manifests are produced locally
 - unsupported gates are reported as explicit debt
@@ -14,6 +14,7 @@ this means:
 ## near term
 
 - improve universal gmail discovery so a user can ask for likely lab/result history without writing provider-specific targets
+- validate Gmail API OAuth onboarding, target locators, and raw attachment acquisition on a broader live corpus before changing the public label
 - add redacted fixture patterns for more languages and providers
 - harden metadata extraction for owner, analysis date, sample draw date, and provider
 - keep low-confidence metadata from looking promoted: fallback-dated assets must stay in `raw/` with `needs_review`
@@ -23,7 +24,6 @@ this means:
 
 ## mid term
 
-- implement Gmail API-first acquisition
 - keep browser/CDP as fallback for rescue and debugging
 - add a public adapter development guide
 - add a minimal agent workflow for reading manifests and proposing next actions

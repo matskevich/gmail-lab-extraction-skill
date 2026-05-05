@@ -46,6 +46,22 @@ check_bin pdftoppm
 check_bin tesseract
 
 echo
+echo "== python modules =="
+"$PYTHON_BIN" - <<'PY'
+modules = [
+    ("googleapiclient.discovery", "gmail_api_client"),
+    ("google_auth_oauthlib.flow", "gmail_oauth"),
+]
+for module, label in modules:
+    try:
+        __import__(module)
+    except Exception as exc:
+        print(f"missing\t{label}\t{exc}")
+    else:
+        print(f"ok\t{label}\t{module}")
+PY
+
+echo
 echo "== paths =="
 if [[ -x "$CHROME_APP" ]]; then
   printf 'ok\tchrome_app\t%s\n' "$CHROME_APP"
@@ -64,10 +80,13 @@ echo "== syntax =="
 node --check "$SKILL_DIR/scripts/gmail_collect_attachments_from_query.mjs"
 node --check "$SKILL_DIR/scripts/gmail_collect_inline_assets_from_query.mjs"
 node --check "$SKILL_DIR/scripts/gmail_fetch_attachment_via_cdp.mjs"
+node --check "$SKILL_DIR/scripts/gmail_assert_authenticated.mjs"
 node --check "$SKILL_DIR/scripts/chrome_cdp_create_target.mjs"
 node --check "$SKILL_DIR/scripts/chrome_cdp_close_target.mjs"
 "$PYTHON_BIN" -m py_compile "$SKILL_DIR/scripts/ocr_image_assets.py"
+"$PYTHON_BIN" -m py_compile "$REPO_ROOT/scripts/run_gmail_api_export.py"
 zsh -n "$SKILL_DIR/scripts/start_chrome_cdp_clone.sh"
+zsh -n "$SKILL_DIR/scripts/start_chrome_cdp_profile.sh"
 zsh -n "$SKILL_DIR/scripts/gmail_find_page_ws_url.sh"
 zsh -n "$SKILL_DIR/scripts/gmail_smoke_check.sh"
 zsh -n "$REPO_ROOT/scripts/run_gmail_discovery.sh"

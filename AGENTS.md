@@ -10,14 +10,17 @@ read this first if you are a new agent:
 1. `START_HERE_FOR_AGENTS.md`
 2. `README.md`
 3. `docs/agent_install.md`
-4. `docs/api_first_architecture.md`
-5. `docs/architecture.md`
-6. `docs/completeness_framework.md`
-7. `docs/test_strategy.md`
-8. `docs/goals_review.md`
-9. `schemas/*.schema.json`
+4. `docs/google_api_setup.md`
+5. `docs/acquisition_auth_router.md`
+6. `docs/api_first_architecture.md`
+7. `docs/architecture.md`
+8. `docs/completeness_framework.md`
+9. `docs/test_strategy.md`
+10. `docs/goals_review.md`
+11. `schemas/*.schema.json`
 
 current truth:
+- gmail api native attachments: working through `scripts/run_gmail_api_export.py` when OAuth/token is available
 - gmail native attachments: working
 - gmail inline image assets: working
 - image OCR lane: working
@@ -41,6 +44,7 @@ current truth:
 
 known sharp edge:
 - historical partial-ready mails can regress if attachment controls hydrate only after scroll or delayed Gmail rendering
+- browser/CDP profile clones can lose Gmail auth; `gmail_not_authenticated` is an acquisition/auth blocker, not a PDF password result
 - keep old cases in a regression corpus; one recent green smoke run is not enough
 
 non-goals:
@@ -55,7 +59,9 @@ repo entrypoints:
   - `.claude/skills/gmail-lab-export`
   - `docs/agent_install.md`
 - `./scripts/doctor.sh`
+- `gmail-lab diagnose-gmail-acquisition`
 - `./scripts/run_gmail_discovery.sh ./examples/targets.tsv`
+- `./scripts/run_gmail_api_export.py ./examples/targets.tsv ./runs/gmail-api-run`
 - `./scripts/run_gmail_lab_export.sh ./examples/targets.tsv`
 - `./scripts/run_regression_suite.sh ./examples/regression_targets.tsv`
 - `./scripts/run_portal_lab_export.sh ./examples/portal_targets.tsv`
