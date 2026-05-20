@@ -240,11 +240,13 @@ def _google_setup_guide() -> dict[str, object]:
         "official_quickstart": "https://developers.google.com/gmail/api/quickstart/python",
         "required_google_steps": [
             "create or select a Google Cloud project",
+            "make sure the Google account can access Google Cloud Console; Google may require 2-step verification",
             "enable Gmail API",
             "configure Google Auth platform / OAuth consent screen",
             "create OAuth client with application type Desktop app",
             "download the client JSON",
         ],
+        "cloud_console_auth_gate": "If Google Cloud Console shows `Google Cloud access blocked`, enable 2-step verification for that Google account before creating the OAuth client.",
         "local_client_secret_path": "~/.gmail-lab/oauth-client.json",
         "local_token_path": "~/.gmail-lab/tokens/gmail-api-token.json",
         "scope": "https://www.googleapis.com/auth/gmail.readonly",

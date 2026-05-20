@@ -221,6 +221,7 @@ def test_setup_google_reports_missing_client_secret_plan(tmp_path) -> None:
     assert payload["client_secrets"]["canonical_path"].endswith("oauth-client.json")
     assert payload["client_secrets"]["selected"] == {}
     assert payload["guide"]["scope"] == "https://www.googleapis.com/auth/gmail.readonly"
+    assert "2-step verification" in payload["guide"]["cloud_console_auth_gate"]
     assert "Desktop OAuth" in "\n".join(payload["next_steps"])
 
 

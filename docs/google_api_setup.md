@@ -17,10 +17,11 @@ The ChatGPT Gmail connector is useful for diagnosis during development, but it i
 
 1. Open Google Cloud Console.
 2. Create or select a project.
-3. Enable `Gmail API`.
-4. Configure OAuth consent screen.
-5. Create OAuth client credentials with application type `Desktop app`.
-6. Download the JSON file locally.
+3. If Google Cloud shows `Google Cloud access blocked`, enable 2-step verification on that Google account and refresh the console.
+4. Enable `Gmail API`.
+5. Configure OAuth consent screen.
+6. Create OAuth client credentials with application type `Desktop app`.
+7. Download the JSON file locally.
 
 Keep that file out of git. The canonical local path is:
 
@@ -67,6 +68,8 @@ This command prints the exact missing piece: absent OAuth client JSON, invalid w
 Use `gmail-lab setup --skip-auth` only for package/runtime initialization. Use `setup-google` for Gmail API auth. `auth-google` remains as a narrow compatibility command, but `setup-google` is the operator-facing entrypoint.
 
 Do not use an API key, Google account password, app password, service-account key, portal password, or PDF password for this step. Gmail API acquisition needs only a local Desktop OAuth client plus the user's browser consent for the mailbox that receives the lab emails.
+
+The one account-level prerequisite is Google Cloud Console access. As of 2026, Google may block Cloud Console until 2-step verification is enabled. That gate must be resolved in the Google account security UI; the extractor should not turn on account MFA automatically.
 
 ## Target locators
 
