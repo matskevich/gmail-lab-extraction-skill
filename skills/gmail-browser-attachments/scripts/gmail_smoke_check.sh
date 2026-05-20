@@ -17,7 +17,7 @@ PY
 
 echo
 echo "== page ws =="
-WS_URL="$("$SCRIPT_DIR/gmail_find_page_ws_url.sh" "$PORT" "Inbox")"
+WS_URL="$("$SCRIPT_DIR/gmail_find_page_ws_url.sh" "$PORT")"
 if [[ -z "$WS_URL" ]]; then
   echo "gmail_page_ws_url: missing"
   exit 1
@@ -27,3 +27,7 @@ echo "$WS_URL"
 echo
 echo "== inbox snapshot =="
 node "$SCRIPT_DIR/gmail_inbox_snapshot.mjs" "$WS_URL" 5
+
+echo
+echo "== auth gate =="
+node "$SCRIPT_DIR/gmail_assert_authenticated.mjs" "$WS_URL"

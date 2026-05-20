@@ -59,6 +59,8 @@ query authoring rule:
 - prefer the narrowest query that still reliably surfaces the correct row
 - if a strict `from:` filter hides an old thread, prefer a broader order-id query over a false negative
 - do not broaden so far that the needle becomes ambiguous across multiple threads
+- treat an order id as a retrieval key, not freshness proof; a different hash can still be an alternate-language copy of an old result
+- decide freshness from thread/provider/artifact dates plus `pdf_text_status`, then read `asset_manifest.tsv` before trusting `final/`
 
 minimum real corpus before public alpha:
 - old ready attachment

@@ -4,7 +4,7 @@
   "description": "Per-file metadata truth layer emitted after extraction and OCR.",
   "columns": [
     { "name": "raw_file", "type": "absolute_path", "required": true },
-    { "name": "final_file", "type": "absolute_path", "required": true },
+    { "name": "final_file", "type": "absolute_path_or_dash", "required": true },
     { "name": "analysis_date", "type": "date", "format": "YYYY-MM-DD", "required": true },
     { "name": "analysis_date_source", "type": "string", "required": true, "enum": ["provider_page", "gmail_received_or_thread", "artifact_contextual_date", "filename", "run_fallback"] },
     { "name": "analysis_date_status", "type": "string", "required": true, "enum": ["direct", "inferred", "fallback"] },
@@ -14,6 +14,6 @@
     { "name": "provider", "type": "string", "required": true },
     { "name": "provider_source", "type": "string", "required": true, "enum": ["thread_provider_hint", "query_domain", "provider_page_text", "thread_text", "none"] },
     { "name": "confidence", "type": "string", "required": true, "enum": ["high", "medium", "low"] },
-    { "name": "status", "type": "string", "required": true, "enum": ["ok", "missing_raw", "non_result", "sidecar"] }
+    { "name": "status", "type": "string", "required": true, "enum": ["ok", "missing_raw", "non_result", "sidecar", "needs_review"] }
   ]
 }

@@ -6,6 +6,8 @@ the product boundary is still self-hosted and local-first. `gmail api first` is 
 
 the local browser/cdp lane is useful for rescue and debugging, but it is the wrong primary extractor even for a self-hosted tool once a stable gmail api lane exists.
 
+for the operational auth router, see `docs/acquisition_auth_router.md`.
+
 ## design principle
 
 build around what the mailbox *contains*, not what the gmail web ui *happens to render today*.
@@ -106,13 +108,16 @@ important rule:
 responsibility:
 - OCR images
 - extract PDF text
-- infer password candidates from provider/thread hints
+- infer password hints from provider/thread context
+- resolve password candidates through a local secret-resolution layer
 - derive date / owner / provider claims
 
 important rule:
 - enrichment produces claims
 - acquisition produces evidence
 - do not merge them
+- password hints are evidence; password values are local secrets
+- see `docs/secret_resolution.md`
 
 ## 7. promotion layer
 
@@ -131,6 +136,8 @@ browser/cdp should remain for:
 - debugging weird mailbox cases
 
 browser/cdp should not be the primary production extractor for mail that is already reachable via Gmail API.
+
+for browser fallback, prefer a persistent CDP-only Chrome profile that the operator logs into once. cloned active profiles are a legacy rescue path because Google may reject copied Gmail credentials.
 
 ## testing implications
 
@@ -152,6 +159,13 @@ minimum live corpus:
 - keep current browser extractor as fallback
 - add an api-native discovery + acquisition lane
 - keep current manifests
+
+current implementation note:
+- `gmail-lab acquire-gmail` is the primary operator command for Gmail-native attachment acquisition
+- `scripts/run_gmail_api_export.py` implements the first api-native acquisition lane for gmail-native attachments
+- it uses `gmail.readonly`, `messages.list`, `messages.get(format=full)`, and `users.messages.attachments.get`
+- it writes the same run surface as browser gmail export: `raw/`, `pdf_text/`, `run_manifest.tsv`, `evidence_manifest.tsv`, `asset_manifest.tsv`, and per-row `json_log`
+- it is acquisition-first; password values still flow only through the local secret-resolution layer
 
 ### v1.1
 - replay current enrichment and promotion layers on top of api-native raw artifacts

@@ -84,13 +84,19 @@ async function waitFor(session, checkExpression, timeoutMs = 15000, intervalMs =
   throw new Error(`timeout waiting for condition: ${checkExpression}`);
 }
 
-async function waitForSearchResultsRow(session, rowNeedle, timeoutMs = 20000) {
+async function waitForSearchResultsRows(session, timeoutMs = 20000) {
   return await waitFor(
     session,
     `(() => {
-      const needle = ${JSON.stringify(rowNeedle)};
-      return Array.from(document.querySelectorAll('tr[role="row"]'))
-        .some(tr => (tr.innerText || '').includes(needle));
+      const rows = Array.from(document.querySelectorAll('tr[role="row"]'))
+        .filter(tr => {
+          const rect = tr.getBoundingClientRect();
+          const style = getComputedStyle(tr);
+          return !!tr.offsetParent && rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+        })
+        .map((tr, index) => ({ index, text: (tr.innerText || '').trim() }))
+        .filter(row => row.text);
+      return rows.length ? rows.slice(0, 10) : false;
     })()`,
     timeoutMs,
     500
@@ -175,19 +181,28 @@ try {
     const searchUrl = `https://mail.google.com/mail/u/0/#search/${encodeURIComponent(query)}`;
     await session.evaluate(`location.href = ${JSON.stringify(searchUrl)}`);
     await waitForSearchQuery(session, 20000);
-    await waitForSearchResultsRow(session, rowNeedle, 20000);
+    const searchRows = await waitForSearchResultsRows(session, 20000);
 
     const clicked = await session.evaluate(`
       (() => {
         const rowNeedle = ${JSON.stringify(rowNeedle)};
-        const row = Array.from(document.querySelectorAll('tr[role="row"]'))
-          .find(tr => (tr.innerText || '').includes(rowNeedle));
-        if (!row) return false;
+        const rows = Array.from(document.querySelectorAll('tr[role="row"]'))
+          .filter(tr => {
+            const rect = tr.getBoundingClientRect();
+            const style = getComputedStyle(tr);
+            return !!tr.offsetParent && rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+          })
+          .filter(tr => ((tr.innerText || '').trim()));
+        const row = rows.find(tr => (tr.innerText || '').includes(rowNeedle)) || rows[0];
+        if (!row) return { clicked: false, fallback: false, rowCount: rows.length };
+        const fallback = !(row.innerText || '').includes(rowNeedle);
         row.click();
-        return true;
+        return { clicked: true, fallback, rowCount: rows.length, rowText: (row.innerText || '').slice(0, 500) };
       })()
     `);
-    if (!clicked) throw new Error(`row not found for needle: ${rowNeedle}`);
+    if (!clicked?.clicked) {
+      throw new Error(`row not found for query: ${query}; searchRows=${JSON.stringify(searchRows)}`);
+    }
 
     await waitFor(
       session,
@@ -252,6 +267,8 @@ try {
     }
 
     const thread = await session.evaluate(gmailThreadContextExpression());
+    thread.searchRows = searchRows;
+    thread.selectedSearchRow = clicked;
     thread.attachmentNames = diagnostics.attachmentCandidateNames;
     thread.attachmentCandidateCount = diagnostics.attachmentCandidateCount;
     thread.downloadUrlCount = diagnostics.downloadUrlCount;

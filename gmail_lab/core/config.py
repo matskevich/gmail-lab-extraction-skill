@@ -14,6 +14,7 @@ class IdentityConfig(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     known_non_owner_names: list[str] = Field(default_factory=list)
     birth_date: str = ""
+    birth_date_secret_id: str = ""
     emails: list[str] = Field(default_factory=list)
 
 

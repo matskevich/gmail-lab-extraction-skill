@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -84,12 +86,20 @@ def summarize_pdf_text_manifest(path: Path) -> str:
     ok_statuses = {"ok_text", "ok_ocr"}
     if statuses and statuses <= ok_statuses:
         return "ok"
+    if "needs_password_hint" in statuses and statuses <= (ok_statuses | {"needs_password_hint"}):
+        return "partial" if statuses & ok_statuses else "needs_password_hint"
     if "missing_dependency" in statuses and statuses <= (ok_statuses | {"missing_dependency"}):
         return "partial" if statuses & ok_statuses else "missing_dependency"
     if "fail" in statuses and statuses <= (ok_statuses | {"fail"}):
         return "partial" if statuses & ok_statuses else "fail"
-    if "missing_dependency" in statuses or "fail" in statuses:
-        return "partial" if statuses & ok_statuses else ("missing_dependency" if "missing_dependency" in statuses and "fail" not in statuses else "fail")
+    if "needs_password_hint" in statuses or "missing_dependency" in statuses or "fail" in statuses:
+        if statuses & ok_statuses:
+            return "partial"
+        if "fail" in statuses:
+            return "fail"
+        if "needs_password_hint" in statuses:
+            return "needs_password_hint"
+        return "missing_dependency"
     return "unknown"
 
 
@@ -103,8 +113,10 @@ def combine_status(acquisition_status: str, *statuses: str) -> str:
         return "ok"
     if any(item == "partial" for item in effective):
         return "partial"
-    if any(item == "ok" for item in effective) and any(item in {"missing_dependency", "fail", "unknown"} for item in effective):
+    if any(item == "ok" for item in effective) and any(item in {"missing_dependency", "needs_password_hint", "fail", "unknown"} for item in effective):
         return "partial"
+    if any(item == "needs_password_hint" for item in effective) and not any(item in {"missing_dependency", "fail", "unknown"} for item in effective):
+        return "needs_password_hint"
     if any(item == "missing_dependency" for item in effective) and not any(item in {"fail", "unknown"} for item in effective):
         return "missing_dependency"
     if any(item == "fail" for item in effective):
@@ -115,11 +127,41 @@ def combine_status(acquisition_status: str, *statuses: str) -> str:
 def run_cmd(args: list[str], stdout_path: Path, stderr_path: Path) -> None:
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     stderr_path.parent.mkdir(parents=True, exist_ok=True)
+    repo_root = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = f"{repo_root}{os.pathsep}{env['PYTHONPATH']}" if env.get("PYTHONPATH") else str(repo_root)
     with stdout_path.open("w", encoding="utf-8") as stdout_fh, stderr_path.open("w", encoding="utf-8") as stderr_fh:
-        subprocess.run(args, check=False, stdout=stdout_fh, stderr=stderr_fh, text=True)
+        subprocess.run(args, check=False, stdout=stdout_fh, stderr=stderr_fh, text=True, env=env)
 
 
-def maybe_rerun_gmail_row(repo_root: Path, row: dict[str, str], rerun_all: bool) -> dict[str, str]:
+def pdf_secret_args(prompt_secrets: bool, remember_secret: str) -> list[str]:
+    args: list[str] = []
+    if prompt_secrets:
+        args.append("--prompt-secrets")
+    args.extend(["--remember-secret", remember_secret])
+    return args
+
+
+def derivative_layout(raw_dir: Path) -> tuple[Path, str | None]:
+    if raw_dir.name == "raw" and (raw_dir.parent / "run_manifest.tsv").exists():
+        return raw_dir.parent, None
+    return raw_dir.parent.parent, raw_dir.name
+
+
+def derivative_dir(run_dir: Path, kind: str, slug: str | None) -> Path:
+    if slug is None:
+        return run_dir / kind
+    return run_dir / kind / slug
+
+
+def maybe_rerun_gmail_row(
+    repo_root: Path,
+    row: dict[str, str],
+    rerun_all: bool,
+    *,
+    prompt_secrets: bool,
+    remember_secret: str,
+) -> dict[str, str]:
     if row.get("status") != "ok":
         row["ocr_status"] = row.get("ocr_status", "not_applicable") or "not_applicable"
         row["pdf_text_status"] = row.get("pdf_text_status", "not_applicable") or "not_applicable"
@@ -130,23 +172,31 @@ def maybe_rerun_gmail_row(repo_root: Path, row: dict[str, str], rerun_all: bool)
         return row
 
     raw_dir = Path(row["raw_dir"])
-    run_dir = raw_dir.parent.parent
+    run_dir, slug = derivative_layout(raw_dir)
     log_dir = run_dir / "logs"
-    ocr_dir = run_dir / "ocr" / raw_dir.name
-    pdf_text_dir = run_dir / "pdf_text" / raw_dir.name
+    ocr_dir = derivative_dir(run_dir, "ocr", slug)
+    pdf_text_dir = derivative_dir(run_dir, "pdf_text", slug)
     ocr_manifest = ocr_dir / "ocr_manifest.tsv"
     pdf_text_manifest = pdf_text_dir / "pdf_text_manifest.tsv"
     json_log = Path(row["json_log"])
 
     run_cmd(
-        ["python3", str(repo_root / "skills/gmail-browser-attachments/scripts/ocr_image_assets.py"), str(raw_dir), str(ocr_dir)],
-        log_dir / f"{raw_dir.name}.ocr.stdout.log",
-        log_dir / f"{raw_dir.name}.ocr.stderr.log",
+        [sys.executable, str(repo_root / "skills/gmail-browser-attachments/scripts/ocr_image_assets.py"), str(raw_dir), str(ocr_dir)],
+        log_dir / f"{slug or 'raw'}.ocr.stdout.log",
+        log_dir / f"{slug or 'raw'}.ocr.stderr.log",
     )
     run_cmd(
-        ["python3", str(repo_root / "scripts/extract_pdf_text.py"), str(raw_dir), str(pdf_text_dir), "--thread-json", str(json_log)],
-        log_dir / f"{raw_dir.name}.pdf_text.stdout.log",
-        log_dir / f"{raw_dir.name}.pdf_text.stderr.log",
+        [
+            sys.executable,
+            str(repo_root / "scripts/extract_pdf_text.py"),
+            str(raw_dir),
+            str(pdf_text_dir),
+            "--thread-json",
+            str(json_log),
+            *pdf_secret_args(prompt_secrets, remember_secret),
+        ],
+        log_dir / f"{slug or 'raw'}.pdf_text.stdout.log",
+        log_dir / f"{slug or 'raw'}.pdf_text.stderr.log",
     )
 
     row["ocr_manifest"] = str(ocr_manifest) if ocr_manifest.exists() else "-"
@@ -157,7 +207,14 @@ def maybe_rerun_gmail_row(repo_root: Path, row: dict[str, str], rerun_all: bool)
     return row
 
 
-def maybe_rerun_portal_row(repo_root: Path, row: dict[str, str], rerun_all: bool) -> dict[str, str]:
+def maybe_rerun_portal_row(
+    repo_root: Path,
+    row: dict[str, str],
+    rerun_all: bool,
+    *,
+    prompt_secrets: bool,
+    remember_secret: str,
+) -> dict[str, str]:
     if row.get("status") != "ok":
         row["pdf_text_status"] = row.get("pdf_text_status", "not_applicable") or "not_applicable"
         row["enrichment_status"] = "blocked_by_extract_fail"
@@ -167,16 +224,16 @@ def maybe_rerun_portal_row(repo_root: Path, row: dict[str, str], rerun_all: bool
         return row
 
     raw_dir = Path(row["raw_dir"])
-    run_dir = raw_dir.parent.parent
+    run_dir, slug = derivative_layout(raw_dir)
     log_dir = run_dir / "logs"
-    pdf_text_dir = run_dir / "pdf_text" / raw_dir.name
+    pdf_text_dir = derivative_dir(run_dir, "pdf_text", slug)
     pdf_text_manifest = pdf_text_dir / "pdf_text_manifest.tsv"
     thread_json = Path(row["thread_json"])
     provider_json = Path(row["provider_json"])
 
     run_cmd(
         [
-            "python3",
+            sys.executable,
             str(repo_root / "scripts/extract_pdf_text.py"),
             str(raw_dir),
             str(pdf_text_dir),
@@ -184,9 +241,10 @@ def maybe_rerun_portal_row(repo_root: Path, row: dict[str, str], rerun_all: bool
             str(thread_json),
             "--provider-json",
             str(provider_json),
+            *pdf_secret_args(prompt_secrets, remember_secret),
         ],
-        log_dir / f"{raw_dir.name}.pdf_text.stdout.log",
-        log_dir / f"{raw_dir.name}.pdf_text.stderr.log",
+        log_dir / f"{slug or 'raw'}.pdf_text.stdout.log",
+        log_dir / f"{slug or 'raw'}.pdf_text.stderr.log",
     )
 
     row["pdf_text_manifest"] = str(pdf_text_manifest) if pdf_text_manifest.exists() else "-"
@@ -204,6 +262,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Re-run OCR/PDF-text enrichment for an existing run directory.")
     parser.add_argument("run_dir", help="Existing run directory with run_manifest.tsv")
     parser.add_argument("--all", action="store_true", help="Re-run enrichment for all successful rows, not only non-ok rows")
+    parser.add_argument("--prompt-secrets", action="store_true", help="Prompt locally for PDF password/date secrets when needed")
+    parser.add_argument(
+        "--remember-secret",
+        choices=["never", "session", "keychain", "encrypted-file"],
+        default=os.environ.get("PDF_REMEMBER_SECRET", "never"),
+        help="Persistence for secrets entered through --prompt-secrets",
+    )
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir).expanduser().resolve()
@@ -220,14 +285,32 @@ def main() -> int:
     is_gmail = "ocr_manifest" in fieldnames or "mode" in fieldnames
     if is_gmail:
         fieldnames = ensure_columns(fieldnames, GMAIL_HEADER)
-        rows = [maybe_rerun_gmail_row(repo_root, row, args.all) for row in rows]
+        rows = [
+            maybe_rerun_gmail_row(
+                repo_root,
+                row,
+                args.all,
+                prompt_secrets=args.prompt_secrets,
+                remember_secret=args.remember_secret,
+            )
+            for row in rows
+        ]
     else:
         fieldnames = ensure_columns(fieldnames, PORTAL_HEADER)
-        rows = [maybe_rerun_portal_row(repo_root, row, args.all) for row in rows]
+        rows = [
+            maybe_rerun_portal_row(
+                repo_root,
+                row,
+                args.all,
+                prompt_secrets=args.prompt_secrets,
+                remember_secret=args.remember_secret,
+            )
+            for row in rows
+        ]
 
     write_tsv(manifest_path, fieldnames, rows)
     run_cmd(
-        ["python3", str(repo_root / "scripts/derive_asset_metadata.py"), str(run_dir)],
+        [sys.executable, str(repo_root / "scripts/derive_asset_metadata.py"), str(run_dir)],
         run_dir / "logs/asset_metadata.stdout.log",
         run_dir / "logs/asset_metadata.stderr.log",
     )

@@ -5,9 +5,13 @@ agent-first self-hosted open-source toolkit for exporting lab/result history fro
 agent handoff docs:
 - `START_HERE_FOR_AGENTS.md`
 - `AGENTS.md`
+- `docs/agent_install.md`
+- `docs/google_api_setup.md`
+- `docs/acquisition_auth_router.md`
 - `docs/api_first_architecture.md`
 - `docs/self_hosted_product.md`
 - `docs/architecture.md`
+- `docs/learning_loop.md`
 - `docs/completeness_framework.md`
 - `docs/test_strategy.md`
 - `docs/release_checklist.md`
@@ -17,7 +21,8 @@ agent handoff docs:
 - `schemas/*.schema.json`
 
 what it does:
-- extracts native gmail attachments via cdp
+- extracts native gmail attachments through Gmail API when OAuth is available
+- extracts native gmail attachments via persistent cdp/browser fallback when API auth is unavailable or UI behavior must be debugged
 - extracts gmail inline image assets rendered through `view=fimg` / `attid`
 - follows tokenized portal links from gmail for supported providers
 - runs ocr over extracted image assets
@@ -37,7 +42,7 @@ python substrate status:
   - evidence archive
   - discovery/evidence/claims/analysis manifests
   - ownership + sample-draw claim derivation
-- this is the foundation for the future `gmail api first` lane; current live extraction still happens through the legacy scripts
+- `scripts/run_gmail_api_export.py` is the first Gmail API acquisition lane for native attachments; browser/CDP remains the fallback/debug lane
 
 what it does not do:
 - external site login automation
@@ -55,7 +60,7 @@ product direction:
 - product boundary: self-hosted, local-first, agent-first, operator-controlled
 - production should be `gmail api first`
 - browser/cdp should remain a fallback and debugging lane
-- see `docs/self_hosted_product.md`, `docs/agent_first_roadmap.md`, and `docs/api_first_architecture.md`
+- see `docs/self_hosted_product.md`, `docs/agent_first_roadmap.md`, `docs/api_first_architecture.md`, and `docs/acquisition_auth_router.md`
 
 completeness rule:
 - historical recovery has two separate goals:
@@ -69,21 +74,41 @@ completeness rule:
 
 ```bash
 ./install.sh
+gmail-lab --help
 ```
 
-by default this copies the bundled skill into `~/.codex/skills/gmail-browser-attachments`.
+by default this installs the `gmail-lab` CLI with `pipx` when available, then copies the bundled Codex skills into `~/.codex/skills/`:
+
+- `gmail-lab-export`
+- `gmail-browser-attachments`
+
+if `pipx` is unavailable, `install.sh` creates a wrapper at `~/.local/bin/gmail-lab` that points at the repo venv. make sure `~/.local/bin` is in `PATH`.
+
+to install skills only:
+
+```bash
+INSTALL_ENGINE=0 ./install.sh
+```
+
+to also install the Claude Code skill into `~/.claude/skills/`:
+
+```bash
+INSTALL_CLAUDE_SKILLS=1 ./install.sh
+```
 
 ### option 2: install through codex skill-installer from github
 
 after publishing this repo to github:
 
 ```bash
-python3 "$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py" \
+"${PYTHON_BIN:-.venv/bin/python}" "$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py" \
   --repo <owner>/gmail-lab-extraction-skill \
   --path skills/gmail-browser-attachments
 ```
 
 restart codex after install so the new skill is discovered.
+
+for Claude Code and generic-agent setup, see `docs/agent_install.md`.
 
 ## repo use
 
@@ -96,9 +121,11 @@ check environment:
 bootstrap the local-first substrate:
 
 ```bash
-gmail-lab init
+gmail-lab setup
 gmail-lab identity-status
 ```
+
+`gmail-lab setup` creates the local state root, checks OCR/PDF helper binaries, reports Gmail API auth state, and gives the next command when OAuth is missing. Pass `--client-secrets <oauth-desktop-client.json>` on a clean machine to complete Gmail API auth during setup.
 
 derive claims after messages and evidence are recorded:
 
@@ -113,6 +140,31 @@ run a discovery-only pass before raw acquisition:
 ```bash
 ./scripts/run_gmail_discovery.sh ./examples/targets.tsv
 ```
+
+run the acquisition router for Gmail-native attachments:
+
+```bash
+gmail-lab verify-gmail-paths --targets-tsv ./tmp/my_targets.tsv
+gmail-lab acquire-gmail ./tmp/my_targets.tsv ./runs/my-acquire-run
+gmail-lab explain-run ./runs/my-acquire-run
+```
+
+Use `gmail-lab verify-gmail-paths --targets-tsv <targets.tsv> --allow-live` as the operator/agent smoke test. It checks CLI installation, OCR/PDF helpers, Gmail API auth, browser/CDP auth, then optionally runs acquisition and embeds the `explain-run` summary in one JSON payload.
+
+The router uses Gmail API when a valid token or OAuth client secret is available, then falls back to an already-authenticated persistent CDP profile. If neither auth lane is available, it writes a typed blocker into `run_manifest.tsv` instead of silently trying a fragile Chrome clone.
+
+Use `gmail-lab explain-run <run-dir>` (or `gmail-lab status <run-dir>`) before interpreting a run. It reads the manifests and diagnostic log, then returns a single JSON state with blockers and next commands. A state such as `acquisition_blocked` means raw bytes did not land; do not interpret older files with the same filename/order id.
+
+Authenticate Gmail API once when needed:
+
+```bash
+gmail-lab setup-google --client-secrets /path/to/oauth-client.json
+gmail-lab acquire-gmail ./tmp/my_targets.tsv ./runs/my-acquire-run
+```
+
+`setup-google` validates that the JSON is a Desktop OAuth client, copies it to `~/.gmail-lab/oauth-client.json` with local-only permissions, opens the browser OAuth flow, and stores the reusable token at `~/.gmail-lab/tokens/gmail-api-token.json`. Later runs reuse that token unless `--token` or `GMAIL_LAB_GOOGLE_TOKEN` points elsewhere. The API lane uses `gmail.readonly`, writes raw attachments into `raw/`, then runs the existing PDF text/password lane.
+
+For OAuth setup and target locator rules, read [docs/google_api_setup.md](docs/google_api_setup.md).
 
 expected OCR/PDF helpers:
 - `tesseract` for image-heavy email assets and OCR fallback
@@ -130,8 +182,8 @@ brew install tesseract poppler
 for a new agent/operator pair, the shortest honest path is:
 
 1. prepare a small target file, for example `./tmp/my_targets.tsv`
-2. start the chrome cdp clone by running the export script or the bundled skill helper
-3. run one logged export into a local run directory
+2. run `gmail-lab verify-gmail-paths --targets-tsv ./tmp/my_targets.tsv`
+3. run `gmail-lab verify-gmail-paths --targets-tsv ./tmp/my_targets.tsv --run-dir ./runs/my-smoke --allow-live`
 4. inspect the manifests before trusting the final filenames
 
 minimal path:
@@ -139,14 +191,32 @@ minimal path:
 ```bash
 mkdir -p ./tmp
 cp ./examples/targets.tsv ./tmp/my_targets.tsv
-./scripts/run_gmail_lab_export.sh ./tmp/my_targets.tsv ./runs/my-first-run
+gmail-lab verify-gmail-paths --targets-tsv ./tmp/my_targets.tsv --run-dir ./runs/my-acquire-run --allow-live
+gmail-lab explain-run ./runs/my-acquire-run
 ```
+
+legacy browser fallback path:
+
+```bash
+gmail-lab acquire-gmail ./tmp/my_targets.tsv ./runs/my-cdp-run --start-persistent-cdp
+```
+
+if the run reports `cdp_not_authenticated`, log into Gmail in that persistent CDP profile once, then rerun the router. use legacy cloned Chrome only when explicitly requested:
+
+```bash
+gmail-lab acquire-gmail ./tmp/my_targets.tsv ./runs/my-cdp-run --start-persistent-cdp
+gmail-lab acquire-gmail ./tmp/my_targets.tsv ./runs/my-clone-run --allow-legacy-clone
+```
+
+This is an acquisition blocker, not a PDF parsing result. after raw PDFs land in `raw/`, passworded text extraction is handled by the local secret-resolution lane and may return `needs_password_hint`.
 
 after the run, inspect:
 - `./runs/my-first-run/run_manifest.tsv`
 - `./runs/my-first-run/asset_manifest.tsv`
 - `./runs/my-first-run/raw/`
 - `./runs/my-first-run/final/`
+
+read `asset_manifest.tsv` before trusting `final/`. `final/` is a convenience view; rows with `analysis_date_status=fallback` stay in `raw/` as `status=needs_review` until a real artifact, thread, provider, or filename date is recovered.
 
 if you are testing historical mailbox recovery rather than just one export, also run:
 
@@ -161,7 +231,7 @@ then inspect:
 run a logged, reproducible extraction batch:
 
 ```bash
-./scripts/run_gmail_lab_export.sh ./examples/targets.tsv
+gmail-lab acquire-gmail ./examples/targets.tsv ./runs/example-acquire
 ```
 
 run a live regression corpus against known historical cases:
@@ -180,7 +250,7 @@ for a full private validation against the user's personal health lab inventory:
 ./scripts/build_health_validation_corpus.py --inventory /path/to/private_inventory.tsv --out-dir ./tmp/health-full-validation-YYYYmmdd
 ./scripts/run_gmail_discovery.sh ./tmp/health-full-validation-YYYYmmdd/gmail_targets.tsv ./tmp/health-full-validation-YYYYmmdd/discovery
 ./scripts/run_regression_suite.sh ./tmp/health-full-validation-YYYYmmdd/regression_targets.tsv ./tmp/health-full-validation-YYYYmmdd/regression
-./scripts/run_gmail_lab_export.sh ./tmp/health-full-validation-YYYYmmdd/gmail_targets.tsv ./tmp/health-full-validation-YYYYmmdd/export
+gmail-lab acquire-gmail ./tmp/health-full-validation-YYYYmmdd/gmail_targets.tsv ./tmp/health-full-validation-YYYYmmdd/export
 PORTAL_PATIENT_HINT='<last-name>' ./scripts/run_portal_lab_export.sh ./tmp/health-full-validation-YYYYmmdd/portal_targets.tsv ./tmp/health-full-validation-YYYYmmdd/portal
 ./scripts/audit_health_validation.py --oracle ./tmp/health-full-validation-YYYYmmdd/oracle.tsv --export-run ./tmp/health-full-validation-YYYYmmdd/export --portal-run ./tmp/health-full-validation-YYYYmmdd/portal --out ./tmp/health-full-validation-YYYYmmdd/coverage_report.md
 ```
@@ -189,6 +259,21 @@ re-run only the derivative lanes after installing missing OCR/PDF tools:
 
 ```bash
 ./scripts/rerun_enrichment.py ./runs/run-YYYYmmdd-HHMMSS
+```
+
+unlock an existing raw run with the local secret-resolution interface:
+
+```bash
+gmail-lab unlock-pdf-run ./runs/run-YYYYmmdd-HHMMSS
+```
+
+This prompts locally when a password/date hint is present and remembers the value for the current session by default. For a reusable local secret, first run:
+
+```bash
+gmail-lab remember-pdf-secret \
+  --scope identity \
+  --hint-type birth_date_ddmmyyyy \
+  --persistence keychain
 ```
 
 that creates:
@@ -213,6 +298,7 @@ regression runs create:
 discovery semantics:
 - `discovery_manifest.tsv` answers `what exists in the mailbox and of what class?`
 - `run_manifest.tsv` answers `what raw bytes actually landed?`
+- `gmail-lab explain-run <run-dir>` answers `what layer is blocked and what command should run next?`
 - `regression_summary.tsv` answers `did the historical case pass cleanly, what landed, what inline noise was filtered, and which gmail thread was actually opened?`
 - these are different questions and must not be collapsed
 
@@ -258,7 +344,7 @@ current portal support:
 - `invitro`
   - opens gmail thread by direct gmail id or locator
   - extracts anonymized invitro result link from the email body
-  - opens provider page in the chrome clone
+  - opens provider page in the CDP browser profile
   - clicks `Download`
   - captures the real pdf endpoint and saves the pdf locally
 
@@ -273,9 +359,10 @@ metadata layer:
   - `owner_source`
   - `owner_status` = `likely_owner|weak_owner|unknown_owner`
   - provider + confidence
-  - `status` = `ok|missing_raw|non_result|sidecar`
+  - `status` = `ok|missing_raw|non_result|sidecar|needs_review`
 - obvious non-result support attachments stay in `raw/`, are marked `non_result`, and are not promoted into `final/`
 - formal sidecars such as `.sig` stay in `raw/`, are marked `sidecar`, and are not promoted as clinical result files
+- assets whose only date is the run date fallback are marked `needs_review` and are not promoted into `final/`
 
 claims layer:
 - `claims_manifest.tsv` records:
@@ -299,17 +386,38 @@ claims layer:
 
 password-protected pdf lane:
 - the runners also create `pdf_text/<target>/pdf_text_manifest.tsv`
+- password values are resolved by `gmail_lab/core/secrets/`; gmail extraction only supplies hints and context
 - extraction order is:
   - plain `pdftotext`
-  - password-aware `pdftotext` using inferred candidates
+  - password-aware `pdftotext` using local secret candidates
   - password-aware `pdftoppm` + `tesseract` OCR fallback
 - password candidates can come from:
-  - provider metadata such as `birthDate`
-  - gmail thread text such as `password is your birth date DDMMYYYY`
-  - explicit env hints:
-    - `PDF_BIRTH_DATE=1970-01-31`
-    - `PDF_PASSWORD_CANDIDATES=31011970,19700131`
-- manifests keep `password_source`, but redact the concrete password value
+  - gmail/provider hints such as `password is your birth date DDMMYYYY`
+  - local session cache, OS keychain, or encrypted local fallback
+  - explicit email text when the email contains a concrete password
+  - explicit run-level env hints:
+    - `PDF_BIRTH_DATE=<local-birth-date>`
+    - `PDF_PASSWORD_CANDIDATES=<candidate-1>,<candidate-2>`
+  - an explicit tty prompt through `--prompt-secrets` or `PDF_PASSWORD_PROMPT=1`
+- practical run-level example:
+
+```bash
+PDF_BIRTH_DATE='<local-birth-date>' \
+PDF_PASSWORD_CANDIDATES='<candidate-1>,<candidate-2>' \
+gmail-lab acquire-gmail ./tmp/my_targets.tsv ./runs/my-acquire-run
+```
+
+- prompt example for a local one-off run:
+
+```bash
+./scripts/extract_pdf_text.py ./runs/my-first-run/raw ./tmp/pdf-text-check \
+  --prompt-secrets \
+  --remember-secret session
+```
+
+- persistence choices are `never|session|keychain|encrypted-file`; permanent persistence is opt-in
+- manifests keep `password_source`, `secret_scope`, `secret_purpose`, and `secret_persistence`, but redact the concrete password value
+- encrypted PDFs with a hint and no available local secret emit `status=needs_password_hint` instead of hanging in non-interactive runs
 - `pdf_text_manifest.tsv` status now distinguishes `missing_dependency` from real extraction failure
 
 image-heavy targets:
@@ -326,15 +434,18 @@ date policy:
   - filename
   - run fallback
 - if the date is indirect, the filename still carries it, and `asset_manifest.tsv` keeps the source + status so downstream ingest can tell `direct` from `inferred`
+- if the only date is `run_fallback`, the asset is kept out of `final/` with `status=needs_review`
 
 portal boundary:
 - current support proves `gmail thread -> tokenized portal link -> provider pdf`
 - this is not yet a universal login robot for every lab cabinet
 - providers with username/password/2fa/captcha still need separate adapters
+- portal account passwords and patient gate hints are separate secret purposes from PDF unlock. Store them with `gmail-lab remember-portal-secret`; PDF extraction only reads `pdf_unlock:*` secret ids.
 
 release discipline:
 - use [docs/release_checklist.md](docs/release_checklist.md) before calling the project ready for public alpha
 - keep public examples sanitized and real mailbox regression corpora local under gitignored paths
+- use [docs/learning_loop.md](docs/learning_loop.md) to promote each repeated live failure into a regression target, test, doc/skill rule, schema/status, or sanitized intake item
 
 ## feedback and contribution
 
@@ -354,7 +465,18 @@ privacy rule:
 ## skill use
 
 ```bash
-"$HOME/.codex/skills/gmail-browser-attachments/scripts/start_chrome_cdp_clone.sh"
+gmail-lab diagnose-gmail-acquisition
+gmail-lab verify-gmail-paths --targets-tsv ./tmp/my_targets.tsv
+```
+
+```bash
+"$HOME/.codex/skills/gmail-browser-attachments/scripts/start_chrome_cdp_profile.sh"
+```
+
+The packaged router can also start that profile explicitly:
+
+```bash
+gmail-lab acquire-gmail ./tmp/my_targets.tsv ./runs/my-cdp-run --start-persistent-cdp
 ```
 
 ```bash
@@ -365,6 +487,8 @@ WS_URL="$("$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_find_page
 "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_smoke_check.sh" 9222
 ```
 
+the smoke check now fails fast if CDP is on a Gmail sign-in/auth page. use Gmail API for native attachments, or log into the persistent CDP profile before running collectors.
+
 ```bash
 node "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_collect_attachments_from_query.mjs" \
   "$WS_URL" \
@@ -374,7 +498,7 @@ node "$HOME/.codex/skills/gmail-browser-attachments/scripts/gmail_collect_attach
 ```
 
 ```bash
-python3 "$HOME/.codex/skills/gmail-browser-attachments/scripts/ocr_image_assets.py" \
+"${PYTHON_BIN:-.venv/bin/python}" "$HOME/.codex/skills/gmail-browser-attachments/scripts/ocr_image_assets.py" \
   ./downloads \
   ./ocr
 ```

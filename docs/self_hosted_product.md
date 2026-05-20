@@ -29,13 +29,11 @@ the default operating model is:
 - do not require a hosted backend
 - do not mutate mailbox state by default
 
-current live extraction is still browser/cdp-first.
+current direction:
+- `gmail api first` for Gmail-native attachments
+- browser/cdp fallback second for rescue and UI-specific assets
 
-future direction:
-- `gmail api first`
-- browser/cdp fallback second
-
-that future direction should improve reliability, but it does not change the local-first product boundary.
+this improves reliability without changing the local-first product boundary.
 
 ## what this repo should feel like
 
@@ -49,6 +47,7 @@ for the human operator:
 - run extraction
 - inspect `discovery_manifest.tsv`, `run_manifest.tsv`, `regression_summary.tsv`
 - review `raw/`, `pdf_text/`, `ocr/`, and `final/`
+- read manifests before trusting filenames in `final/`; `status=needs_review` means the raw file exists but the metadata is still too weak for downstream use
 
 ## explicit non-goals for v1
 
@@ -62,12 +61,13 @@ for the human operator:
 
 - `agent-first self-hosted gmail lab export toolkit`
 - `local-first evidence capture + metadata derivation`
-- `browser/cdp live extraction today, gmail api first later`
+- `gmail api native extraction first, browser/cdp fallback for rescue and UI-specific assets`
 
 ## release bar for open-source usefulness
 
 before calling this repo broadly useful for self-hosting, it should be easy for a new agent/operator pair to:
 1. install the tool on a local machine
-2. run a small mailbox export without hidden setup folklore
-3. understand what landed, what was filtered, and what is still uncertain from manifests alone
-4. keep the outputs locally with reviewable metadata and provenance
+2. run `gmail-lab setup` without hidden setup folklore
+3. run a small mailbox export
+4. understand what landed, what was filtered, and what is still uncertain from manifests alone through `gmail-lab explain-run`
+5. keep the outputs locally with reviewable metadata and provenance

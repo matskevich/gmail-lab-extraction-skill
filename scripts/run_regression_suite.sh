@@ -8,15 +8,28 @@ if [[ $# -lt 1 ]]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+PYTHON_BIN="${PYTHON_BIN:-$REPO_ROOT/.venv/bin/python}"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="python3"
+fi
+if ! "$PYTHON_BIN" - <<'PY'
+import sys
+if sys.version_info < (3, 11):
+    raise SystemExit(f"python >=3.11 required, got {sys.version.split()[0]}; create .venv or set PYTHON_BIN")
+PY
+then
+  exit 1
+fi
 SKILL_DIR="$REPO_ROOT/skills/gmail-browser-attachments"
-TARGETS_FILE="$(python3 - <<'PY' "$1"
+TARGETS_FILE="$("$PYTHON_BIN" - <<'PY' "$1"
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).expanduser().resolve())
 PY
 )"
 RUN_DIR_INPUT="${2:-$REPO_ROOT/runs/regression-$(date +%Y%m%d-%H%M%S)}"
-RUN_DIR="$(python3 - <<'PY' "$RUN_DIR_INPUT"
+RUN_DIR="$("$PYTHON_BIN" - <<'PY' "$RUN_DIR_INPUT"
 from pathlib import Path
 import sys
 print(Path(sys.argv[1]).expanduser().resolve())
@@ -63,7 +76,7 @@ if [[ -z "$WS_URL" ]]; then
 fi
 
 slugify() {
-  python3 - <<'PY' "$1"
+  "$PYTHON_BIN" - <<'PY' "$1"
 import re
 import sys
 value = sys.argv[1].strip().lower()
@@ -103,7 +116,7 @@ while IFS=$'\t' read -r query needle mode min_attachments min_inline note; do
     row_status="ok"
   fi
 
-  counts="$(python3 - <<'PY' "$json_log" "$row_status"
+  counts="$("$PYTHON_BIN" - <<'PY' "$json_log" "$row_status"
 import json
 import sys
 path, row_status = sys.argv[1], sys.argv[2]
@@ -133,6 +146,6 @@ PY
   echo -e "${line_no}\t${slug}\t${row_status}\t${min_attachments}\t${actual_attachments}\t${min_inline}\t${actual_inline}\t${query}\t${needle}\t${note}\t${json_log}\t${stderr_log}" >> "$MANIFEST"
 done < "$TARGETS_FILE"
 
-python3 "$REPO_ROOT/scripts/summarize_regression_run.py" "$RUN_DIR" "$SUMMARY" >/dev/null
+"$PYTHON_BIN" "$REPO_ROOT/scripts/summarize_regression_run.py" "$RUN_DIR" "$SUMMARY" >/dev/null
 
 echo "$MANIFEST"

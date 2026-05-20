@@ -64,3 +64,7 @@ move from `browser-first alpha` to `api-first beta`:
 2. replay the current enrichment/promotion layer on API-native evidence
 3. add a live tokenized portal corpus case
 4. expand metadata parsers for provider-direct analysis dates and owner confirmation
+
+## post-release live smoke note
+
+2026-04-28 Prodia freshness check showed a trust issue in the metadata lane: a passworded PDF whose text extraction failed could still receive `analysis_date=run_fallback` and appear in `final/` with a run-date prefix. The code now keeps fallback-dated assets in `raw/` as `needs_review` instead of promoting them.

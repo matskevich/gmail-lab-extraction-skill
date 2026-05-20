@@ -13,7 +13,7 @@ run on every code change:
 goal:
 - syntax ok
 - required local binaries visible
-- chrome cdp lane reachable when a live session is expected
+- `gmail-lab diagnose-gmail-acquisition` reports whether Gmail API or browser/CDP acquisition is currently available
 
 ## layer 2: live regression corpus
 
@@ -79,7 +79,7 @@ private health oracle validation:
 ./scripts/build_health_validation_corpus.py --inventory /path/to/private_inventory.tsv --out-dir ./tmp/health-full-validation-YYYYmmdd
 ./scripts/run_gmail_discovery.sh ./tmp/health-full-validation-YYYYmmdd/gmail_targets.tsv ./tmp/health-full-validation-YYYYmmdd/discovery
 ./scripts/run_regression_suite.sh ./tmp/health-full-validation-YYYYmmdd/regression_targets.tsv ./tmp/health-full-validation-YYYYmmdd/regression
-./scripts/run_gmail_lab_export.sh ./tmp/health-full-validation-YYYYmmdd/gmail_targets.tsv ./tmp/health-full-validation-YYYYmmdd/export
+gmail-lab acquire-gmail ./tmp/health-full-validation-YYYYmmdd/gmail_targets.tsv ./tmp/health-full-validation-YYYYmmdd/export
 PORTAL_PATIENT_HINT='<last-name>' ./scripts/run_portal_lab_export.sh ./tmp/health-full-validation-YYYYmmdd/portal_targets.tsv ./tmp/health-full-validation-YYYYmmdd/portal
 ./scripts/audit_health_validation.py --oracle ./tmp/health-full-validation-YYYYmmdd/oracle.tsv --export-run ./tmp/health-full-validation-YYYYmmdd/export --portal-run ./tmp/health-full-validation-YYYYmmdd/portal --out ./tmp/health-full-validation-YYYYmmdd/coverage_report.md
 ```
@@ -104,6 +104,9 @@ portal operator-hint rule:
 
 - `missing_dependency`
   - environment problem in OCR/PDF-text lane
+
+- `needs_password_hint`
+  - encrypted PDF has a password rule/hint, but the non-interactive run had no local secret candidate
 
 - `pass`
   - minimum expected raw assets landed
