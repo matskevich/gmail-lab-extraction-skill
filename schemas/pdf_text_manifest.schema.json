@@ -9,6 +9,7 @@
     { "name": "password_source", "type": "string", "required": true, "enum": ["", "none", "env_password_candidates", "env_birth_date", "prompt_password_candidates", "prompt_birth_date", "session_cache", "keychain", "encrypted_file", "thread_explicit_password"] },
     { "name": "password_used", "type": "string", "required": true },
     { "name": "secret_scope", "type": "string", "required": true, "enum": ["", "attachment_sha256", "gmail_thread", "provider_identity", "identity"] },
+    { "name": "secret_purpose", "type": "string", "required": true, "enum": ["pdf_unlock"] },
     { "name": "secret_persistence", "type": "string", "required": true, "enum": ["none", "never", "session", "keychain", "encrypted-file", "env", "message"] },
     { "name": "candidate_count", "type": "integer", "required": true },
     { "name": "status", "type": "string", "required": true, "enum": ["ok_text", "ok_ocr", "missing_dependency", "needs_password_hint", "fail"] },

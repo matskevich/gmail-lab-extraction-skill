@@ -12,12 +12,15 @@ Install repo skills locally:
 
 ```bash
 ./install.sh
+gmail-lab --help
 ```
 
-This installs:
+This installs the `gmail-lab` CLI with `pipx` when available, then installs:
 
 - `gmail-lab-export`: workflow router for discovery, export, manifests, enrichment, and passworded PDFs
 - `gmail-browser-attachments`: lower-level CDP attachment/inline-image extraction helper
+
+If `pipx` is unavailable, `install.sh` creates `~/.local/bin/gmail-lab` as a wrapper around the repo venv. If the command is still not found, add `~/.local/bin` to `PATH` or rerun from the repo with `./.venv/bin/gmail-lab`.
 
 Restart Codex after installation so skills are discovered.
 
@@ -46,15 +49,31 @@ Read in this order:
 2. `AGENTS.md`
 3. `README.md`
 4. `docs/architecture.md`
-5. `docs/test_strategy.md`
-6. `docs/secret_resolution.md`
-7. `schemas/*.schema.json`
+5. `docs/google_api_setup.md`
+6. `docs/acquisition_auth_router.md`
+7. `docs/learning_loop.md`
+8. `docs/test_strategy.md`
+9. `docs/secret_resolution.md`
+10. `schemas/*.schema.json`
 
 Then run:
 
 ```bash
 ./scripts/doctor.sh
+gmail-lab setup --skip-auth
 python -m gmail_lab --help
+gmail-lab setup-google --check-only
+gmail-lab diagnose-gmail-acquisition
+gmail-lab verify-gmail-paths --targets-tsv ./tmp/private_targets.tsv
+```
+
+For a clean Gmail API install, use:
+
+```bash
+gmail-lab setup-google --client-secrets ~/.gmail-lab/oauth-client.json
+gmail-lab verify-gmail-paths --targets-tsv ./tmp/private_targets.tsv --run-dir ./runs/gmail-smoke --allow-live
+gmail-lab acquire-gmail ./tmp/private_targets.tsv ./runs/gmail-acquire-run
+gmail-lab explain-run ./runs/gmail-acquire-run
 ```
 
 ## Packaging Rule

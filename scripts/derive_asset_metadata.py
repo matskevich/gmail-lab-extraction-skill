@@ -325,6 +325,47 @@ def load_pdf_texts(pdf_text_manifest_path: Path) -> list[str]:
     return texts
 
 
+def saved_items_from_json_log(extract_json: dict) -> list[dict[str, str]]:
+    saved_items = extract_json.get("saved", []) if isinstance(extract_json, dict) else []
+    if isinstance(saved_items, list) and saved_items:
+        return saved_items
+
+    raw_items = extract_json.get("raw", []) if isinstance(extract_json, dict) else []
+    if not isinstance(raw_items, list):
+        return []
+    out: list[dict[str, str]] = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        saved_to = str(item.get("saved_to") or item.get("path") or "").strip()
+        if not saved_to:
+            continue
+        out.append({"saved_to": saved_to, "filename": str(item.get("filename") or Path(saved_to).name)})
+    return out
+
+
+def thread_from_json_log(extract_json: dict) -> dict:
+    thread_json = extract_json.get("thread", {}) if isinstance(extract_json, dict) else {}
+    if isinstance(thread_json, dict) and thread_json:
+        return thread_json
+    if not isinstance(extract_json, dict):
+        return {}
+    visible_dates = []
+    email_ts = str(extract_json.get("email_ts", "")).strip()
+    if email_ts:
+        visible_dates.append(email_ts)
+    title_bits = [
+        str(extract_json.get("sender", "")).strip(),
+        str(extract_json.get("query", "")).strip(),
+    ]
+    return {
+        "id": str(extract_json.get("message_id", "")).strip(),
+        "title": " ".join(bit for bit in title_bits if bit),
+        "bodySnippet": str(extract_json.get("bodySnippet") or extract_json.get("body_snippet") or "").strip(),
+        "visibleDates": visible_dates,
+    }
+
+
 def link_or_copy(src: Path, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists():
@@ -364,9 +405,9 @@ def main() -> int:
         if "json_log" in row:
             extract_json = json_load(Path(row["json_log"]))
             query = extract_json.get("query", "") if isinstance(extract_json, dict) else ""
-            thread_json = extract_json.get("thread", {}) if isinstance(extract_json, dict) else {}
+            thread_json = thread_from_json_log(extract_json)
             provider_json = {}
-            saved_items = extract_json.get("saved", []) if isinstance(extract_json, dict) else []
+            saved_items = saved_items_from_json_log(extract_json)
             ocr_texts = load_ocr_texts(Path(row["ocr_manifest"])) if row.get("ocr_manifest", "-") != "-" else []
             pdf_texts = load_pdf_texts(Path(row["pdf_text_manifest"])) if row.get("pdf_text_manifest", "-") != "-" else []
         else:

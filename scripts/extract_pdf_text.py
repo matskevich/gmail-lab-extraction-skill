@@ -147,6 +147,7 @@ def build_secret_context(thread_json: dict, provider_json: dict, pdf_path: Path)
     return SecretContext(
         provider=provider_name(thread_json, provider_json),
         identity_alias="default",
+        purpose="pdf_unlock",
         attachment_sha256=file_sha256(pdf_path) if pdf_path.exists() else "",
         gmail_thread_id=thread_id(thread_json),
         hint_text=context_text,
@@ -174,6 +175,7 @@ def manifest_row(
     password_source: str = "",
     password_used: str = "",
     secret_scope: str = "",
+    secret_purpose: str = "pdf_unlock",
     secret_persistence: str = "none",
     candidate_count: int = 0,
     status: str,
@@ -186,6 +188,7 @@ def manifest_row(
         "password_source": password_source,
         "password_used": password_used,
         "secret_scope": secret_scope,
+        "secret_purpose": secret_purpose,
         "secret_persistence": secret_persistence,
         "candidate_count": str(candidate_count),
         "status": status,
@@ -269,6 +272,7 @@ def try_extract(
                     password_source=candidate.source,
                     password_used=redact_password(candidate.value),
                     secret_scope=str(candidate.scope),
+                    secret_purpose=candidate.purpose,
                     secret_persistence=candidate.persistence,
                     candidate_count=len(candidates),
                     status="ok_text",
@@ -301,6 +305,7 @@ def try_extract(
                     password_source=candidate.source,
                     password_used=redact_password(candidate.value),
                     secret_scope=str(candidate.scope),
+                    secret_purpose=candidate.purpose,
                     secret_persistence=candidate.persistence,
                     candidate_count=len(candidates),
                     status="ok_ocr",
@@ -322,7 +327,12 @@ def try_extract(
         status = "fail"
 
     if status == "needs_password_hint":
-        notes_parts.append("next=rerun with --prompt-secrets or set PDF_PASSWORD_CANDIDATES/PDF_BIRTH_DATE")
+        prompt_requested = prompt_secrets or os.environ.get("PDF_PASSWORD_PROMPT", "").lower() in {"1", "true", "yes"}
+        if prompt_requested and not sys.stdin.isatty():
+            notes_parts.append("prompt_skipped=stdin_not_tty")
+        notes_parts.append(
+            "next=run gmail-lab remember-pdf-secret, rerun with --prompt-secrets, or set PDF_PASSWORD_CANDIDATES/PDF_BIRTH_DATE"
+        )
 
     return manifest_row(
         pdf_path,
@@ -381,6 +391,7 @@ def main() -> int:
                 "password_source",
                 "password_used",
                 "secret_scope",
+                "secret_purpose",
                 "secret_persistence",
                 "candidate_count",
                 "status",

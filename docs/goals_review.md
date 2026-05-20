@@ -17,6 +17,7 @@
 ## current status
 
 ### green
+- Gmail API native attachment acquisition for OAuth/token-backed runs
 - `gmail search -> thread -> native attachments`
 - `gmail search -> thread -> inline image assets`
 - live regression runner for known historical cases
@@ -36,6 +37,7 @@
 - primary user is now explicitly another ai agent
 
 ### yellow
+- Gmail API lane needs broader live corpus validation before replacing browser/CDP in all packaged workflows
 - discovery still depends on maintaining a regression corpus of real historical mails
 - `analysis_date` is sometimes inferred from gmail thread date, not direct from artifact
 - `owner` can still be `weak_owner` or `unknown_owner` on forwarded / context-only mails
@@ -75,7 +77,7 @@ for self-hosted operator use now:
 - yes, with browser/cdp setup and honest expectations about provider/login limits
 
 for other ai agents now:
-- yes, if they follow the manifest-first contract and stay within the current browser-first live boundary
+- yes, if they follow the manifest-first contract and prefer Gmail API for native attachments, with browser/CDP as fallback
 
 for claiming universal lab export:
 - no

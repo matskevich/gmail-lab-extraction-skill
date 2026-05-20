@@ -1,6 +1,6 @@
-runs/
-tmp/
-data/
+/runs/
+/tmp/
+/data/
 __pycache__/
 *.pyc
 .DS_Store
@@ -18,6 +18,9 @@ dist/
 
 # secrets (never commit)
 client_secret.json
+client_secret*.json
+credentials*.json
 token.json
+*token*.json
 *.pem
 *.key

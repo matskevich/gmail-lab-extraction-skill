@@ -24,7 +24,13 @@ From repo root:
 
 ```bash
 ./scripts/doctor.sh
+gmail-lab setup --skip-auth
 python -m gmail_lab --help
+gmail-lab setup-google --check-only
+gmail-lab diagnose-gmail-acquisition
+gmail-lab verify-gmail-paths --targets-tsv ./tmp/private_targets.tsv
+gmail-lab acquire-gmail ./tmp/private_targets.tsv ./runs/gmail-acquire-run
+gmail-lab explain-run ./runs/gmail-acquire-run
 ```
 
 For real mailbox runs, keep targets in a gitignored file such as `tmp/private_targets.tsv`.
@@ -32,12 +38,21 @@ For real mailbox runs, keep targets in a gitignored file such as `tmp/private_ta
 ## Decision Router
 
 - "find likely lab emails" -> run discovery first; inspect `discovery_manifest.tsv`.
-- "download/export results" -> run `./scripts/run_gmail_lab_export.sh <targets.tsv> <run-dir>`.
+- "first run / install check" -> run `gmail-lab setup-google`; pass `--client-secrets <oauth-desktop-client.json>` to complete Gmail API auth.
+- "does this machine actually download Gmail docs" -> run `gmail-lab verify-gmail-paths --targets-tsv <targets.tsv> --run-dir <run-dir> --allow-live`; read `live_acquisition.explanation` before interpreting files.
+- "download/export results" -> run `gmail-lab acquire-gmail <targets.tsv> <run-dir>`; it routes through Gmail API, authenticated CDP, or a typed blocker manifest.
+- "what happened in this run" -> run `gmail-lab explain-run <run-dir>` or `gmail-lab status <run-dir>` before interpreting `final/`.
+- "Gmail URL" -> do not treat `mail.google.com/.../#inbox/FMfc...` as an API id; ask for/search by sender/date/filename, or use `message:<api_id>` / `thread:<api_id>` if the real Gmail API id is known.
+- "`gmail_not_authenticated`" -> browser/CDP did not reach an authenticated Gmail mailbox; use Gmail API, or run `gmail-lab acquire-gmail <targets.tsv> <run-dir> --start-persistent-cdp` and log into Gmail once.
 - "why is final empty/wrong" -> inspect `asset_manifest.tsv`; `final/` is a convenience view.
-- "OCR or PDF text failed" -> inspect `ocr_status`, `pdf_text_status`, and `enrichment_status`, then rerun `./scripts/rerun_enrichment.py <run-dir>` after installing missing tools.
+- "OCR or PDF text failed" -> inspect `ocr_status`, `pdf_text_status`, and `enrichment_status`, then run `gmail-lab unlock-pdf-run <run-dir>` for passworded PDFs or `./scripts/rerun_enrichment.py <run-dir>` after installing missing tools.
 - "passworded PDF" -> use local secret resolution; email/provider text is a hint, password values are local secrets.
+- "`birth_date_secret_id` exists but PDF still needs password" -> run `gmail-lab identity-status`; the useful signal is `birth_date_secret.resolvable`, not the id alone.
+- "`birth_date_secret.legacy=true`" -> run `gmail-lab migrate-pdf-secrets`; this copies `identity:*` / `provider_identity:*` into `pdf_unlock:*` without re-entering the secret.
+- "portal/login password" -> keep it separate from PDF unlock: use `gmail-lab remember-portal-secret --provider <provider>`; PDF extraction must only read `pdf_unlock:*` ids.
 - "is this complete" -> require discovery plus regression evidence, not one happy-path export.
 - "portal link" -> use `./scripts/run_portal_lab_export.sh` only for supported tokenized providers.
+- "how do we learn from this" -> read `docs/learning_loop.md`; promote the incident into a private regression target, test, doc/skill rule, schema/status, or sanitized intake item.
 
 ## Passworded PDFs
 
@@ -46,20 +61,28 @@ Do not put password values, dates of birth, portal passwords, cookies, or tokens
 Use:
 
 ```bash
-./scripts/extract_pdf_text.py ./runs/my-run/raw ./runs/my-run/pdf_text_check \
-  --prompt-secrets \
-  --remember-secret session
+gmail-lab unlock-pdf-run ./runs/my-run
 ```
 
 Expected manifest behavior:
 - `password_used=redacted`
 - `secret_scope` records scope
+- `secret_purpose=pdf_unlock` records that the secret was used only for PDF unlock
 - `secret_persistence` records persistence
 - `status=needs_password_hint` means a non-interactive run had a password hint but no local candidate
+- `prompt_skipped=stdin_not_tty` means `--prompt-secrets` was requested from a non-interactive agent shell; store the secret with `remember-pdf-secret` or run the command in a real terminal.
 
 ## Manifest Reading
 
 If `run_manifest.tsv/status=ok`, raw acquisition succeeded. Enrichment can still be blocked.
+
+Fast path:
+
+```bash
+gmail-lab explain-run <run-dir>
+```
+
+Read `state`, `blockers`, and `next_steps` before opening old local files with similar names.
 
 In `asset_manifest.tsv`:
 - `status=ok` -> promoted to `final/`

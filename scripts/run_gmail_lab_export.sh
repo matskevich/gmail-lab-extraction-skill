@@ -40,6 +40,7 @@ PORT="${PORT:-9222}"
 START_CHROME="${START_CHROME:-1}"
 WAIT_SECONDS="${WAIT_SECONDS:-30}"
 STOP_CHROME_ON_EXIT="${STOP_CHROME_ON_EXIT:-1}"
+STRICT_GMAIL_SMOKE="${STRICT_GMAIL_SMOKE:-1}"
 LOCK_DIR="${TMPDIR:-/tmp}/gmail-lab-cdp-port-${PORT}.lock"
 
 RAW_DIR="$RUN_DIR/raw"
@@ -269,7 +270,13 @@ if [[ -z "$WS_URL" && -n "$BROWSER_WS_URL" ]]; then
   WS_URL="$(resolve_gmail_page_ws_url || true)"
 fi
 if ! "$SKILL_DIR/scripts/gmail_smoke_check.sh" "$PORT" >"$SMOKE_LOG" 2>&1; then
-  echo "warning: smoke check failed, continuing with resolved gmail ws" >>"$SMOKE_LOG"
+  if [[ "$STRICT_GMAIL_SMOKE" == "1" ]]; then
+    echo "gmail smoke check failed; see $SMOKE_LOG" >&2
+    echo "if the chrome clone opened a sign-in page, use Gmail API auth or start a persistent CDP profile and log into Gmail once" >&2
+    echo "diagnose with: gmail-lab diagnose-gmail-acquisition" >&2
+    exit 1
+  fi
+  echo "warning: smoke check failed, continuing with resolved gmail ws because STRICT_GMAIL_SMOKE=0" >>"$SMOKE_LOG"
 fi
 if [[ -z "$WS_URL" ]]; then
   echo "failed to resolve gmail page websocket on port $PORT" >&2

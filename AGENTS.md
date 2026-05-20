@@ -10,18 +10,23 @@ read this first if you are a new agent:
 1. `START_HERE_FOR_AGENTS.md`
 2. `README.md`
 3. `docs/agent_install.md`
-4. `docs/api_first_architecture.md`
-5. `docs/architecture.md`
-6. `docs/completeness_framework.md`
-7. `docs/test_strategy.md`
-8. `docs/goals_review.md`
-9. `schemas/*.schema.json`
+4. `docs/google_api_setup.md`
+5. `docs/acquisition_auth_router.md`
+6. `docs/api_first_architecture.md`
+7. `docs/architecture.md`
+8. `docs/learning_loop.md`
+9. `docs/completeness_framework.md`
+10. `docs/test_strategy.md`
+11. `docs/goals_review.md`
+12. `schemas/*.schema.json`
 
 current truth:
+- gmail api native attachments: working through `scripts/run_gmail_api_export.py` when OAuth/token is available
 - gmail native attachments: working
 - gmail inline image assets: working
 - image OCR lane: working
 - password-hinted PDF text extraction: working
+- secret purpose separation: PDF unlock, portal login, portal patient gate, Gmail OAuth are separate credential classes
 - metadata derivation for `analysis_date` and `owner`: working on gmail runs
 - portal-backed invitro export for anonymous result links: working
 - long-term production direction: `gmail api first`, browser fallback second
@@ -41,7 +46,10 @@ current truth:
 
 known sharp edge:
 - historical partial-ready mails can regress if attachment controls hydrate only after scroll or delayed Gmail rendering
+- browser/CDP profile clones can lose Gmail auth; `gmail_not_authenticated` is an acquisition/auth blocker, not a PDF password result
+- duplicate filenames/order ids can represent a fresh addendum; compare message date and raw hash before trusting an older final artifact
 - keep old cases in a regression corpus; one recent green smoke run is not enough
+- every repeated live failure should be promoted through `docs/learning_loop.md`, not left as chat memory
 
 non-goals:
 - this repo is not a generic browser automation framework
@@ -55,7 +63,13 @@ repo entrypoints:
   - `.claude/skills/gmail-lab-export`
   - `docs/agent_install.md`
 - `./scripts/doctor.sh`
+- `gmail-lab setup`
+- `gmail-lab diagnose-gmail-acquisition`
+- `gmail-lab verify-gmail-paths --targets-tsv ./examples/targets.tsv`
+- `gmail-lab acquire-gmail ./examples/targets.tsv ./runs/gmail-acquire-run`
+- `gmail-lab explain-run ./runs/gmail-acquire-run`
 - `./scripts/run_gmail_discovery.sh ./examples/targets.tsv`
+- `./scripts/run_gmail_api_export.py ./examples/targets.tsv ./runs/gmail-api-run`
 - `./scripts/run_gmail_lab_export.sh ./examples/targets.tsv`
 - `./scripts/run_regression_suite.sh ./examples/regression_targets.tsv`
 - `./scripts/run_portal_lab_export.sh ./examples/portal_targets.tsv`
@@ -115,6 +129,7 @@ enrichment policy:
 safe change rules:
 - prefer adding new provider adapters over complicating the gmail collectors
 - keep password inference in the PDF text lane, not in the collectors
+- never reuse portal login credentials for PDF unlock or PDF unlock secrets for portal login; secret ids must be purpose-namespaced
 - prefer new manifest fields over implicit parsing assumptions
 - keep modules small and single-purpose
 - if you add a new status or column, update:

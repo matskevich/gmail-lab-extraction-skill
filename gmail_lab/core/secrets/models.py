@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 SecretScope = Literal["attachment_sha256", "gmail_thread", "provider_identity", "identity"]
+SecretPurpose = Literal["pdf_unlock", "portal_login", "portal_patient_gate", "gmail_oauth", "unknown"]
 SecretPersistence = Literal[
     "never",
     "session",
@@ -22,6 +23,7 @@ class SecretMetadata:
     label: str = ""
     provider: str = ""
     identity_alias: str = ""
+    purpose: SecretPurpose = "pdf_unlock"
     hint_type: str = ""
     scope: SecretScope = "provider_identity"
     persistence: RememberSecret = "never"
@@ -36,6 +38,7 @@ class SecretCandidate:
     value: str
     source: str
     scope: SecretScope | str = ""
+    purpose: SecretPurpose = "pdf_unlock"
     persistence: SecretPersistence = "never"
     secret_id: str = ""
     hint_type: str = ""
@@ -45,6 +48,7 @@ class SecretCandidate:
 class SecretContext:
     provider: str = ""
     identity_alias: str = ""
+    purpose: SecretPurpose = "pdf_unlock"
     attachment_sha256: str = ""
     gmail_thread_id: str = ""
     hint_text: str = ""
@@ -52,7 +56,7 @@ class SecretContext:
     provider_text: str = ""
     source_file: str = ""
 
-    def scoped_secret_ids(self) -> list[tuple[SecretScope, str]]:
+    def _unscoped_secret_ids(self) -> list[tuple[SecretScope, str]]:
         provider = self.provider.strip().lower() or "unknown-provider"
         identity = self.identity_alias.strip().lower() or "default"
         out: list[tuple[SecretScope, str]] = []
@@ -63,6 +67,12 @@ class SecretContext:
         out.append(("provider_identity", f"provider_identity:{provider}:{identity}"))
         out.append(("identity", f"identity:{identity}"))
         return out
+
+    def scoped_secret_ids(self, *, include_legacy: bool = False) -> list[tuple[SecretScope, str]]:
+        scoped = [(scope, f"{self.purpose}:{secret_id}") for scope, secret_id in self._unscoped_secret_ids()]
+        if include_legacy and self.purpose == "pdf_unlock":
+            scoped.extend(self._unscoped_secret_ids())
+        return scoped
 
     def suggested_scope(self) -> SecretScope:
         if self.attachment_sha256:

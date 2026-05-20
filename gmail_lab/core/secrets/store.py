@@ -53,6 +53,7 @@ def _metadata_with_timestamp(metadata: SecretMetadata) -> SecretMetadata:
         label=metadata.label,
         provider=metadata.provider,
         identity_alias=metadata.identity_alias,
+        purpose=metadata.purpose,
         hint_type=metadata.hint_type,
         scope=metadata.scope,
         persistence=metadata.persistence,

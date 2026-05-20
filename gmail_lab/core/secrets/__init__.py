@@ -4,6 +4,7 @@ from gmail_lab.core.secrets.models import (
     SecretContext,
     SecretMetadata,
     SecretPersistence,
+    SecretPurpose,
     SecretScope,
 )
 from gmail_lab.core.secrets.resolver import SecretResolver
@@ -16,6 +17,7 @@ __all__ = [
     "SecretContext",
     "SecretMetadata",
     "SecretPersistence",
+    "SecretPurpose",
     "SecretResolver",
     "SecretScope",
     "SecretStore",

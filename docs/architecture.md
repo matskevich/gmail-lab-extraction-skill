@@ -9,6 +9,7 @@ the repo has 5 layers:
 - distinguish `candidate_attachment`, `candidate_inline_only`, `candidate_portal_only`, `candidate_context_only`
 
 2. extraction
+- gmail api runner fetches native attachment bytes from mailbox MIME state
 - gmail collectors fetch bytes from gmail page context via cdp
 - portal runners open a provider result page and fetch bytes there
 
@@ -27,11 +28,14 @@ the repo has 5 layers:
 ## modules
 
 ### gmail extraction
+- `gmail-lab acquire-gmail`
+- `scripts/run_gmail_api_export.py`
 - `skills/gmail-browser-attachments/scripts/gmail_collect_attachments_from_query.mjs`
 - `skills/gmail-browser-attachments/scripts/gmail_collect_inline_assets_from_query.mjs`
 
 responsibility:
-- search gmail
+- search gmail through API or browser fallback
+- traverse MIME parts and fetch `attachmentId` bytes when API OAuth is available
 - open the matching thread
 - warm the thread so below-the-fold attachment controls can hydrate before asset collection
 - fetch visible assets with page-context credentials
@@ -45,6 +49,12 @@ must not do:
 - ownership truth claims
 - file classification into medical taxonomy
 - provider-specific portal logic
+
+preferred lane:
+- use `gmail-lab acquire-gmail` for Gmail-native attachments
+- the router uses Gmail API when OAuth/token is available, then authenticated persistent browser/CDP
+- `--start-persistent-cdp` can open the persistent CDP profile explicitly; first run may require a human Gmail login
+- use direct browser/CDP scripts for inline Gmail UI assets, auth-broken rescue, and regression/debugging
 
 ### portal extraction
 - `scripts/run_portal_lab_export.sh`
@@ -160,6 +170,8 @@ existing run recovery:
 - `status` = acquisition only
 - `ocr_status` / `pdf_text_status` / `enrichment_status` = derivative lanes
 - missing local binaries must not downgrade `status` from `ok` to failure
+- auth/acquisition blockers are typed states such as `api_auth_missing`, `cdp_down`, and `cdp_not_authenticated`
+- if raw bytes were not acquired, `enrichment_status=blocked_by_acquisition`
 
 ### regression_summary.tsv
 - one row per historical regression target

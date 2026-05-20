@@ -99,4 +99,43 @@ def test_encrypted_pdf_with_hint_and_no_candidate_returns_needs_password_hint(
     assert row["candidate_count"] == "0"
     assert row["password_used"] == ""
     assert row["secret_scope"] == ""
-    assert "next=rerun with --prompt-secrets" in row["notes"]
+    assert row["secret_purpose"] == "pdf_unlock"
+    assert "next=" in row["notes"]
+    assert "--prompt-secrets" in row["notes"]
+
+
+def test_prompt_secret_in_non_tty_records_skipped_prompt(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    pdf_path = tmp_path / "result.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n")
+
+    def fake_which(name: str) -> str | None:
+        if name == "pdftotext":
+            return "/usr/bin/pdftotext"
+        return None
+
+    monkeypatch.setattr(extract_pdf_text.shutil, "which", fake_which)
+    monkeypatch.setattr(
+        extract_pdf_text,
+        "pdftotext_extract",
+        lambda path, password="": (
+            False,
+            "",
+            "Command Line Error: Incorrect password",
+        ),
+    )
+    monkeypatch.setattr(extract_pdf_text.sys.stdin, "isatty", lambda: False)
+
+    row = extract_pdf_text.try_extract(
+        pdf_path,
+        tmp_path / "out",
+        {"bodySnippet": "for the password is your birth date DDMMYYYY"},
+        {},
+        SecretResolver(store=None, env={}),
+        prompt_secrets=True,
+    )
+
+    assert row["status"] == "needs_password_hint"
+    assert "prompt_skipped=stdin_not_tty" in row["notes"]

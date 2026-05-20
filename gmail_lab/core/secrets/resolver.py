@@ -97,6 +97,7 @@ def _expand_secret_value(value: str, source: str, scope: SecretScope | str, pers
                 value=password,
                 source=source,
                 scope=scope,
+                purpose="pdf_unlock",
                 persistence=persistence,
                 secret_id=secret_id,
                 hint_type=hint_type,
@@ -108,6 +109,7 @@ def _expand_secret_value(value: str, source: str, scope: SecretScope | str, pers
             value=value,
             source=source,
             scope=scope,
+            purpose="pdf_unlock",
             persistence=persistence,
             secret_id=secret_id,
             hint_type=hint_type,
@@ -159,13 +161,13 @@ class SecretResolver:
         if birth_date_env.strip():
             add_many(_expand_secret_value(birth_date_env, "env_birth_date", "identity", "env", "birth_date_ddmmyyyy"))
 
-        for scope, secret_id in context.scoped_secret_ids():
+        for scope, secret_id in context.scoped_secret_ids(include_legacy=True):
             session_value = self.session_store.get(secret_id)
             if session_value:
                 add_many(_expand_secret_value(session_value, "session_cache", scope, "session", hint_type, secret_id))
 
         if self.store:
-            for scope, secret_id in context.scoped_secret_ids():
+            for scope, secret_id in context.scoped_secret_ids(include_legacy=True):
                 stored_value, persistence = self.store.get(secret_id)
                 if stored_value:
                     source = "keychain" if persistence == "keychain" else "encrypted_file"
@@ -221,6 +223,7 @@ class SecretResolver:
             label=hint_type or "pdf_password",
             provider=context.provider,
             identity_alias=context.identity_alias,
+            purpose=context.purpose,
             hint_type=hint_type,
             scope=scope,
             persistence=remember_secret,
