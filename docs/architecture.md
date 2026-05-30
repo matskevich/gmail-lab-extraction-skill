@@ -23,6 +23,7 @@ the repo has 5 layers:
 
 5. promotion
 - downstream systems should read `asset_manifest.tsv`, not guess from filenames
+- CDS filesystem handoff should copy the whole `final/` bundle, not silently drop duplicates
 
 ## modules
 
@@ -118,11 +119,37 @@ targets.tsv / portal_targets.tsv / regression_targets.tsv
   -> PDF text extraction for PDFs
   -> derive_asset_metadata.py
   -> final/ + asset_manifest.tsv
+  -> sync_run_to_cds.py
+  -> CDS raw handoff folder
+```
 
 existing run recovery:
 - `scripts/rerun_enrichment.py` replays only OCR/PDF-text + metadata on an existing `raw/` run
 - use it after installing missing local binaries instead of re-downloading from Gmail
+
+CDS handoff:
+- `scripts/sync_run_to_cds.py` copies a materialized run into the CDS raw handoff folder
+- use it after `final/` and `asset_manifest.tsv` exist
+
+## onboarder operational path
+
+the current operational `onboarder` path is:
+
+```text
+run_onboarder_email_sync.sh
+  -> run_gmail_lab_export.sh
+  -> runs/<run-name>/
+  -> sync_run_to_cds.py
+  -> <cds_raw_root>/<client>/from emails/<run-name>/
 ```
+
+this repo owns everything through the CDS raw handoff copy.
+
+it does not own CDS database writes after that point.
+
+see:
+
+- `docs/onboarder_operational_flow.md`
 
 ## manifest semantics
 
@@ -156,6 +183,20 @@ existing run recovery:
 - `status=non_result` means the raw file was preserved but intentionally not promoted into `final/`
 - `status=sidecar` means a formal companion file, such as `.sig`, was preserved in `raw/` but not promoted as a clinical result file
 
+### cds_asset_manifest.tsv
+- CDS-facing subset of importable rows
+- `final_file` is rewritten to the copied file under the handoff `final/`
+- rows are emitted only when `final_file` is present, status is `ok|accepted` when set, and the copied basename exists in `final/`
+
+### cds_sync_manifest.tsv
+- one row per copied final file
+- proves exactly which local `final/` file landed in the CDS raw handoff
+
+### duplicate_hash_matches.tsv
+- one row per copied file hash that already existed elsewhere in CDS raw storage
+- inventory only
+- must not be used to silently prune the current run folder
+
 ## design choices for agent-friendliness
 
 - stable entrypoints
@@ -170,3 +211,4 @@ existing run recovery:
 - not every provider page exposes a stable downloadable response
 - a clean canonical filename does not mean the date is direct evidence; use the source/status columns
 - discovery completeness still depends on maintaining a real regression corpus of historical cases
+- a copied CDS raw handoff folder does not mean CDS database materialization already happened

@@ -12,6 +12,7 @@ agent handoff docs:
 - `docs/test_strategy.md`
 - `docs/release_checklist.md`
 - `docs/release_verdict.md`
+- `docs/onboarder_operational_flow.md`
 - `docs/goals_review.md`
 - `docs/agent_patterns.md`
 - `schemas/*.schema.json`
@@ -234,6 +235,33 @@ third column is optional:
 - `auto` = native attachments + gmail inline image assets
 - `inline` = only inline image assets
 
+run the full operational onboarding flow into a CDS raw handoff folder:
+
+```bash
+./scripts/run_onboarder_email_sync.sh /absolute/path/to/targets.tsv openclaw_ilya-mutovin
+```
+
+that wrapper:
+- runs `doctor.sh`
+- runs the gmail export batch
+- copies the full `final/` bundle into:
+  - `/srv/integrations/cds/raw/<client>/from emails/<run-name>/`
+- writes:
+  - `cds_asset_manifest.tsv`
+  - `asset_manifest.tsv`
+  - `cds_sync_manifest.tsv`
+  - `duplicate_hash_matches.tsv`
+
+handoff guarantees:
+- every importable row in `cds_asset_manifest.tsv` points at a file copied into `final/`
+- imported row `status` is only `ok` or `accepted`
+- the wrapper does not prune duplicate-looking files across weekly runs; CDS deduplicates later by SHA-256
+
+important boundary:
+- this repo can hand off a fully materialized evidence bundle into CDS raw storage
+- that folder copy is not the same thing as CDS database ingestion or CDS canonical materialization
+- the CDS boundary starts only when CDS-owned ingest logic reads those files as assets
+
 run portal-backed export:
 
 ```bash
@@ -384,6 +412,10 @@ python3 "$HOME/.codex/skills/gmail-browser-attachments/scripts/ocr_image_assets.
 see [`examples/targets.tsv`](./examples/targets.tsv) for batch input format.
 see [`examples/portal_targets.tsv`](./examples/portal_targets.tsv) for portal-backed export targets.
 see [`examples/regression_targets.tsv`](./examples/regression_targets.tsv) for live regression inputs.
+
+for the current operational email-onboarding shape and CDS handoff boundary, read:
+
+- [`docs/onboarder_operational_flow.md`](./docs/onboarder_operational_flow.md)
 
 ## license
 

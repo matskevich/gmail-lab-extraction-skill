@@ -1,7 +1,10 @@
 #!/bin/zsh
 set -euo pipefail
+# Avoid noisy EPERM from zsh background job niceness in restricted sandboxes.
+setopt NO_BG_NICE
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO_ROOT/scripts/env.sh"
 SKILL_DIR="$REPO_ROOT/skills/gmail-browser-attachments"
 PORT="${PORT:-9222}"
 CHROME_APP="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -68,4 +71,6 @@ try:
     print(f"ok\tcdp\t{data.get('Browser', '')}")
 except Exception as exc:
     print(f"down\tcdp\t{exc}")
+    if "Operation not permitted" in str(exc):
+        print("hint\tcdp\tthis environment cannot connect to localhost; run outside a restricted sandbox")
 PY

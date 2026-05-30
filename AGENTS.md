@@ -15,6 +15,7 @@ read this first if you are a new agent:
 6. `docs/test_strategy.md`
 7. `docs/goals_review.md`
 8. `schemas/*.schema.json`
+9. `docs/onboarder_operational_flow.md` when the task is about email onboarding / CDS handoff
 
 current truth:
 - gmail native attachments: working
@@ -54,6 +55,7 @@ repo entrypoints:
 - `./scripts/run_regression_suite.sh ./examples/regression_targets.tsv`
 - `./scripts/run_portal_lab_export.sh ./examples/portal_targets.tsv`
 - `./scripts/rerun_enrichment.py ./runs/<existing-run>` after missing OCR/PDF binaries are installed
+- `./scripts/run_onboarder_email_sync.sh /absolute/path/to/targets.tsv openclaw_client_slug`
 - `gmail-lab derive-claims`
 - `gmail-lab emit-claims-manifest --output ./claims_manifest.tsv`
 - `gmail-lab emit-analysis-manifest --output ./analysis_manifest.tsv`
@@ -71,6 +73,22 @@ artifact contract:
 - `asset_manifest.tsv` = per-file metadata truth layer for downstream ingest
 - `discovery_manifest.tsv` must exist before claiming mailbox completeness
 - `run_manifest.tsv/status` means acquisition only; enrichment lives in `ocr_status`, `pdf_text_status`, `enrichment_status`
+- `cds_asset_manifest.tsv` = CDS import manifest with `final_file` rewritten to the handoff bundle
+- `cds_sync_manifest.tsv` = per-file copy manifest for the CDS raw handoff
+- `duplicate_hash_matches.tsv` = hash-level duplicate inventory relative to older CDS raw runs
+
+workspace cleanup contract:
+- follow the shared workspace contract in `/Users/mac/Documents/Codex app/AGENTS.md`
+- successful run outputs under `raw/`, `ocr/`, `pdf_text/`, `final/`, and the manifest TSVs are not temporary by default
+- temporary local-only packaging and validation output should be deleted when the task is finished if the user did not ask to keep it
+- normal cleanup candidates in this repo include `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `tmp/`, `dist/`, `dist-prebuild-*`, generated `.dmg` packages, and unpacked `.app` release bundles
+- if an agent creates an ad hoc export variant only for comparison or validation, keep the chosen final artifact and remove the superseded variants before finishing
+
+onboarder boundary:
+- current `onboarder` means the operational workflow in `docs/onboarder_operational_flow.md`
+- it ends after copying a fully materialized run into CDS raw storage
+- it does not claim CDS database materialization by folder copy alone
+- weekly runs must still copy duplicate-looking files; CDS owns checksum deduplication after handoff
 
 date policy:
 - every artifact must end with an `analysis_date`

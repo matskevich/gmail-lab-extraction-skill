@@ -1,5 +1,8 @@
 #!/bin/zsh
 set -euo pipefail
+# In some restricted environments, zsh's BG_NICE (background jobs run with nice +5)
+# can fail with EPERM and print confusing noise. Disable it for predictable runs.
+setopt NO_BG_NICE
 
 if [[ $# -lt 1 ]]; then
   echo "usage: scripts/run_gmail_lab_export.sh <targets.tsv> [run-dir]" >&2
@@ -9,6 +12,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO_ROOT/scripts/env.sh"
 SKILL_DIR="$REPO_ROOT/skills/gmail-browser-attachments"
 TARGETS_FILE="$(python3 - <<'PY' "$1"
 from pathlib import Path
@@ -83,6 +87,21 @@ try:
     print("up")
 except Exception:
     print("down")
+PY
+}
+
+port_error_detail() {
+  python3 - <<'PY' "$PORT"
+import sys
+import urllib.request
+
+port = sys.argv[1]
+url = f"http://127.0.0.1:{port}/json/version"
+try:
+    urllib.request.urlopen(url, timeout=1)
+    print("")
+except Exception as exc:
+    print(str(exc))
 PY
 }
 
@@ -234,7 +253,24 @@ if [[ "$(port_is_up)" != "up" ]]; then
 fi
 
 if [[ "$(port_is_up)" != "up" ]]; then
+  detail="$(port_error_detail)"
   echo "failed to start or reach cdp port $PORT" >&2
+  if [[ -n "$detail" ]]; then
+    echo "cdp_check_error=$detail" >&2
+  fi
+  if [[ "$detail" == *"Operation not permitted"* ]]; then
+    cat >&2 <<EOF
+hint: this environment cannot connect to localhost ($PORT) to talk to Chrome DevTools.
+      run this command from a normal system terminal, or change your runner/sandbox
+      settings to allow local network access to 127.0.0.1:$PORT.
+EOF
+  else
+    cat >&2 <<EOF
+hint: ensure Chrome is running with --remote-debugging-port=$PORT and a Gmail tab is open.
+      you can also pre-start the clone:
+        PORT=$PORT "$SKILL_DIR/scripts/start_chrome_cdp_clone.sh"
+EOF
+  fi
   exit 1
 fi
 

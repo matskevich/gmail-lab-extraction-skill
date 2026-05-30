@@ -8,6 +8,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO_ROOT/scripts/env.sh"
 SKILL_DIR="$REPO_ROOT/skills/gmail-browser-attachments"
 TARGETS_FILE="$(python3 - <<'PY' "$1"
 from pathlib import Path

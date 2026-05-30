@@ -44,18 +44,35 @@ function gmailAssetDiagnosticsExpression() {
     (() => {
       const bodyText = document.body.innerText || '';
       const unique = (items) => Array.from(new Set(items.filter(Boolean)));
+      const normalizeAttachmentName = (value) => (value || '')
+        .replace(/^preview attachment\\s+/i, '')
+        .trim();
       const sanitizeName = (value) => (value || '')
         .trim()
         .replace(/^["'([<{\\s]+/, '')
         .replace(/["')>},;:\\s]+$/, '');
+      const attachmentRegex = /\\.(?:pdf|jpe?g|png|gif|webp|tiff?)$/i;
       const attachmentLines = bodyText
         .split('\\n')
-        .map(line => sanitizeName(line))
-        .filter(line => /\\.(?:pdf|jpe?g|png|gif|webp|tiff?)$/i.test(line));
+        .map(line => normalizeAttachmentName(sanitizeName(line)))
+        .filter(line => attachmentRegex.test(line));
       const attachmentMatches = Array.from(
         bodyText.matchAll(/[^\\n]{1,220}?\\.(?:pdf|jpe?g|png|gif|webp|tiff?)/ig)
-      ).map(match => sanitizeName(match[0]));
+      ).map(match => normalizeAttachmentName(sanitizeName(match[0])));
       const attachmentCandidateNames = unique([...attachmentLines, ...attachmentMatches]).slice(0, 30);
+      const pdfCandidateNames = attachmentCandidateNames.filter(name => /\\.pdf$/i.test(name));
+      const downloadFilenames = unique(
+        Array.from(document.querySelectorAll('[download_url]'))
+          .map(el => (el.getAttribute('download_url') || '').split(':')[1] || '')
+          .map(name => {
+            try {
+              return decodeURIComponent(name);
+            } catch {
+              return name;
+            }
+          })
+      );
+      const pdfDownloadNames = downloadFilenames.filter(name => /\\.pdf$/i.test(name));
       const inlineCandidateCount = Array.from(document.querySelectorAll('img[src]')).filter(img => {
         const src = img.currentSrc || img.src || '';
         const w = img.naturalWidth || img.width || 0;
@@ -66,7 +83,12 @@ function gmailAssetDiagnosticsExpression() {
       return {
         attachmentCandidateNames,
         attachmentCandidateCount: attachmentCandidateNames.length,
+        pdfCandidateNames,
+        pdfCandidateCount: pdfCandidateNames.length,
         downloadUrlCount: document.querySelectorAll('[download_url]').length,
+        downloadFilenames,
+        pdfDownloadNames,
+        pdfDownloadCount: pdfDownloadNames.length,
         inlineCandidateCount,
         scanningForViruses: /scanning for viruses|проверка на вирусы|сканирование на вирусы/i.test(bodyText),
       };
@@ -227,15 +249,26 @@ try {
     }
 
     let diagnostics = await session.evaluate(diagnosticsExpression);
-    if (diagnostics.attachmentCandidateCount > 0 && diagnostics.downloadUrlCount === 0) {
+    if (
+      diagnostics.attachmentCandidateCount > 0 &&
+      (
+        diagnostics.downloadUrlCount === 0 ||
+        diagnostics.scanningForViruses ||
+        (diagnostics.pdfCandidateCount > 0 && diagnostics.pdfDownloadCount < diagnostics.pdfCandidateCount)
+      )
+    ) {
       try {
         await waitFor(
           session,
           `(() => {
             const d = ${diagnosticsExpression};
-            return d.downloadUrlCount > 0 || !d.scanningForViruses;
+            return (
+              (d.downloadUrlCount > 0 && !d.scanningForViruses) ||
+              (d.pdfCandidateCount > 0 && d.pdfDownloadCount >= d.pdfCandidateCount) ||
+              (d.attachmentCandidateCount > 0 && d.downloadUrlCount > 0 && !d.scanningForViruses)
+            );
           })()`,
-          diagnostics.scanningForViruses ? 30000 : 12000,
+          diagnostics.scanningForViruses ? 45000 : 15000,
           1000
         );
       } catch {
@@ -254,7 +287,12 @@ try {
     const thread = await session.evaluate(gmailThreadContextExpression());
     thread.attachmentNames = diagnostics.attachmentCandidateNames;
     thread.attachmentCandidateCount = diagnostics.attachmentCandidateCount;
+    thread.pdfCandidateNames = diagnostics.pdfCandidateNames;
+    thread.pdfCandidateCount = diagnostics.pdfCandidateCount;
     thread.downloadUrlCount = diagnostics.downloadUrlCount;
+    thread.downloadFilenames = diagnostics.downloadFilenames;
+    thread.pdfDownloadNames = diagnostics.pdfDownloadNames;
+    thread.pdfDownloadCount = diagnostics.pdfDownloadCount;
     thread.inlineCandidateCount = diagnostics.inlineCandidateCount;
     thread.scanningForViruses = diagnostics.scanningForViruses;
 
